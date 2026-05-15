@@ -137,16 +137,12 @@ export function ExplorePage() {
         </div>
       )}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-5">
-        <div className="lg:col-span-3">
-          <QuotaHeroCard
-            accounts={accountsApi.accounts}
-            problemAccounts={problemAccounts}
-          />
-        </div>
-        <div className="lg:col-span-2">
-          <BreakdownGrid accounts={accountsApi.accounts} />
-        </div>
+      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(280px,360px)_1fr] lg:items-stretch">
+        <QuotaHeroCard
+          accounts={accountsApi.accounts}
+          problemAccounts={problemAccounts}
+        />
+        <BreakdownGrid accounts={accountsApi.accounts} />
       </div>
 
       <section className="mt-8">

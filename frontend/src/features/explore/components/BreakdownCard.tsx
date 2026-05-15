@@ -24,7 +24,7 @@ export function BreakdownCard({ account }: BreakdownCardProps) {
   const hasData = account.status !== "never_synced"
 
   return (
-    <article className="rounded-[--radius-sm] border border-line bg-panel px-4 py-3">
+    <article className="rounded-[--radius-sm] border border-line bg-bg px-3.5 py-3">
       <header className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <ProviderLogo provider={account.provider} size="sm" />
