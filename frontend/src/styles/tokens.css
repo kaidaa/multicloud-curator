@@ -1,0 +1,47 @@
+/*
+ * Design tokens — sumber tunggal nilai warna, radius, dan bayangan untuk
+ * seluruh aplikasi. Tailwind config mirror nilai-nilai ini supaya utility
+ * class konsisten dengan variabel CSS native (komponen yang butuh
+ * `var(--...)` tetap bisa dipakai langsung).
+ */
+
+:root {
+  /* Backgrounds */
+  --bg: #FAF9F7;
+  --sidebar-bg: #F4F2EE;
+  --panel: #F9F5EA;
+  --panel-soft: #E6DFCB;
+  --panel-strong: #D5CCB2;
+
+  /* Text */
+  --ink: #1C1A15;
+  --ink-soft: #3D3829;
+  --muted: #6E685A;
+  --muted-2: #8F8877;
+
+  /* Borders */
+  --line: #DAD2B9;
+  --line-strong: #C3B99B;
+
+  /* Brand & semantic */
+  --primary: #1E3A5F;
+  --primary-strong: #122B4A;
+  --primary-soft: #E2E8F1;
+
+  --danger: #B8473B;
+  --danger-strong: #8E2F25;
+  --danger-soft: #F4DED7;
+
+  --warning: #B8841F;
+  --warning-strong: #8A6115;
+  --warning-soft: #F5E6BD;
+
+  --success: #3F7D58;
+  --success-strong: #2C5A3F;
+  --success-soft: #D4E5DA;
+
+  /* Shape */
+  --shadow: 0 6px 22px rgba(45, 34, 10, 0.06);
+  --radius: 14px;
+  --radius-sm: 9px;
+}
