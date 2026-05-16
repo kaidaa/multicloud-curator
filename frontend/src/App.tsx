@@ -1,10 +1,13 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
 import { AccountsPage } from "@/features/accounts/pages/AccountsPage"
+import { DuplicatesPage } from "@/features/duplicates/pages/DuplicatesPage"
 import { ExplorePage } from "@/features/explore/pages/ExplorePage"
+import { KeywordsPage } from "@/features/keywords/pages/KeywordsPage"
+import { LargeStalePage } from "@/features/large_stale/pages/LargeStalePage"
 import { SearchFullView } from "@/features/search/pages/SearchFullView"
+import { SecurityPage } from "@/features/security/pages/SecurityPage"
 import { AppLayout } from "@/layouts/AppLayout"
-import { ComingSoonPage } from "@/layouts/ComingSoonPage"
 
 export function App() {
   return (
@@ -14,11 +17,11 @@ export function App() {
           <Route index element={<Navigate to="/eksplorasi" replace />} />
           <Route path="eksplorasi" element={<ExplorePage />} />
           <Route path="cari" element={<SearchFullView />} />
-          <Route path="duplikasi" element={<ComingSoonPage label="Duplikasi" />} />
-          <Route path="file-besar-usang" element={<ComingSoonPage label="File Besar dan Usang" />} />
-          <Route path="keamanan" element={<ComingSoonPage label="Keamanan File" />} />
+          <Route path="duplikasi" element={<DuplicatesPage />} />
+          <Route path="file-besar-usang" element={<LargeStalePage />} />
+          <Route path="keamanan" element={<SecurityPage />} />
           <Route path="pengaturan/akun" element={<AccountsPage />} />
-          <Route path="pengaturan/keyword" element={<ComingSoonPage label="Keyword Sensitif" />} />
+          <Route path="pengaturan/keyword" element={<KeywordsPage />} />
           <Route path="*" element={<Navigate to="/eksplorasi" replace />} />
         </Route>
       </Routes>

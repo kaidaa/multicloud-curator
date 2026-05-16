@@ -1,9 +1,9 @@
-import type { LargeStaleFile } from "@/features/large_stale/api"
-import { LargeStaleRow } from "@/features/large_stale/components/LargeStaleRow"
+import type { SecurityFile } from "@/features/security/api"
+import { SecurityRow } from "@/features/security/components/SecurityRow"
 import { Skeleton } from "@/shared/components/LoadingState"
 
-interface LargeStaleTableProps {
-  files: LargeStaleFile[]
+interface SecurityTableProps {
+  files: SecurityFile[]
   selectedFileIds: ReadonlySet<string>
   onToggleSelection: (fileId: string) => void
 }
@@ -11,7 +11,7 @@ interface LargeStaleTableProps {
 const TABLE_HEAD_CLASS =
   "px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted"
 
-function LargeStaleTableHead() {
+function SecurityTableHead() {
   return (
     <thead className="border-b border-line">
       <tr>
@@ -20,27 +20,27 @@ function LargeStaleTableHead() {
         </th>
         <th className={`${TABLE_HEAD_CLASS} text-left`}>Nama file</th>
         <th className={`${TABLE_HEAD_CLASS} text-left`}>Lokasi</th>
-        <th className={`${TABLE_HEAD_CLASS} text-left`}>Ukuran</th>
-        <th className={`${TABLE_HEAD_CLASS} text-left`}>Modifikasi terakhir</th>
+        <th className={`${TABLE_HEAD_CLASS} text-left`}>Keyword cocok</th>
+        <th className={`${TABLE_HEAD_CLASS} text-left`}>Dimodifikasi</th>
         <th className={`${TABLE_HEAD_CLASS} text-right`}>Aksi</th>
       </tr>
     </thead>
   )
 }
 
-export function LargeStaleTable({
+export function SecurityTable({
   files,
   selectedFileIds,
   onToggleSelection,
-}: LargeStaleTableProps) {
+}: SecurityTableProps) {
   return (
     <div className="overflow-hidden rounded-[--radius] border border-line bg-panel">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[920px] text-sm">
-          <LargeStaleTableHead />
+          <SecurityTableHead />
           <tbody>
             {files.map((file) => (
-              <LargeStaleRow
+              <SecurityRow
                 key={file.id}
                 file={file}
                 isSelected={selectedFileIds.has(file.fileId)}
@@ -54,28 +54,29 @@ export function LargeStaleTable({
   )
 }
 
-export function LargeStaleTableSkeleton() {
+export function SecurityTableSkeleton() {
   return (
     <div className="overflow-hidden rounded-[--radius] border border-line bg-panel">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[920px] text-sm">
-          <LargeStaleTableHead />
+          <SecurityTableHead />
           <tbody>
-            {Array.from({ length: 5 }).map((_, idx) => (
+            {Array.from({ length: 4 }).map((_, idx) => (
               <tr key={idx} className="border-b border-line last:border-b-0">
                 <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
                 <td className="px-4 py-3">
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-center gap-3">
                     <Skeleton className="h-9 w-9" />
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <Skeleton className="h-4 w-48" />
-                      <Skeleton className="h-3 w-32" />
-                      <Skeleton className="h-5 w-20" />
-                    </div>
+                    <Skeleton className="h-4 w-48" />
                   </div>
                 </td>
-                <td className="px-4 py-3"><Skeleton className="h-4 w-36" /></td>
-                <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+                <td className="px-4 py-3">
+                  <div className="space-y-1">
+                    <Skeleton className="h-4 w-44" />
+                    <Skeleton className="h-3 w-28" />
+                  </div>
+                </td>
+                <td className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>
                 <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
                 <td className="px-4 py-3"><Skeleton className="ml-auto h-7 w-24" /></td>
               </tr>

@@ -1,14 +1,12 @@
 import { ArrowSquareOut } from "@phosphor-icons/react"
 
 import { getProviderLabel } from "@/features/accounts/components/ProviderLogo"
-import type { LargeStaleFile, TriggerReason } from "@/features/large_stale/api"
+import type { SecurityFile } from "@/features/security/api"
 import { FileIcon } from "@/shared/components/FileIcon"
-import { StatusBadge } from "@/shared/components/StatusBadge"
-import { formatBytes } from "@/shared/utils/formatSize"
 import { formatRelativeTime } from "@/shared/utils/formatTime"
 
-interface LargeStaleRowProps {
-  file: LargeStaleFile
+interface SecurityRowProps {
+  file: SecurityFile
   isSelected: boolean
   onToggleSelection: (fileId: string) => void
 }
@@ -18,26 +16,10 @@ function openInProvider(href: string | null) {
   window.open(href, "_blank", "noopener,noreferrer")
 }
 
-function TriggerBadges({ reason }: { reason: TriggerReason }) {
-  return (
-    <span className="flex flex-wrap gap-1.5">
-      {(reason === "large" || reason === "both") && (
-        <StatusBadge variant="warning">Besar</StatusBadge>
-      )}
-      {(reason === "stale" || reason === "both") && (
-        <StatusBadge variant="neutral">Usang</StatusBadge>
-      )}
-    </span>
-  )
-}
-
-export function LargeStaleRow({
-  file,
-  isSelected,
-  onToggleSelection,
-}: LargeStaleRowProps) {
+export function SecurityRow({ file, isSelected, onToggleSelection }: SecurityRowProps) {
   const disabled = !file.deletable
   const reason = file.deletableReason ?? ""
+  const providerLabel = getProviderLabel(file.provider)
 
   return (
     <tr
@@ -63,35 +45,43 @@ export function LargeStaleRow({
         </label>
       </td>
 
-      <td className="px-4 py-3">
-        <div className="flex min-w-0 items-start gap-3">
+      <td className="px-4 py-3 align-top">
+        <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[--radius-sm] bg-panel-soft text-ink-soft">
             <FileIcon type={file.type} mimeType={file.mimeType} size={18} />
           </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-ink">{file.name}</p>
-            <div className="mt-1.5">
-              <TriggerBadges reason={file.triggerReason} />
-            </div>
-            {disabled && (
-              <p className="mt-1 text-[11px] font-medium text-warning-strong">{reason}</p>
-            )}
-          </div>
+          <p className="truncate text-sm font-medium text-ink">{file.name}</p>
         </div>
       </td>
 
       <td className="px-4 py-3 align-top text-sm">
         <p className="truncate text-ink-soft">
           {file.accountEmail} <span className="text-muted-2">·</span>{" "}
-          <span className="text-muted">{getProviderLabel(file.provider)}</span>
+          <span className="text-muted">{providerLabel}</span>
         </p>
         <p className="truncate text-xs text-muted">
           {file.path ?? <span className="text-muted-2">—</span>}
         </p>
+        {disabled && (
+          <p className="mt-1 text-[11px] font-medium text-warning-strong">{reason}</p>
+        )}
       </td>
 
-      <td className="whitespace-nowrap px-4 py-3 align-top text-sm font-medium text-ink-soft">
-        {formatBytes(file.sizeBytes)}
+      <td className="px-4 py-3 align-top">
+        {file.matchedKeywords.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {file.matchedKeywords.map((keyword) => (
+              <span
+                key={keyword}
+                className="rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning-strong"
+              >
+                {keyword}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-2">—</span>
+        )}
       </td>
 
       <td className="whitespace-nowrap px-4 py-3 align-top text-sm text-muted">

@@ -37,16 +37,16 @@ const NAV_GROUPS: NavGroup[] = [
   {
     heading: "KELOLA FILE",
     items: [
-      { label: "Duplikasi", to: "/duplikasi", icon: CopySimple, enabled: false },
-      { label: "File Besar dan Usang", to: "/file-besar-usang", icon: Broom, enabled: false },
-      { label: "Keamanan File", to: "/keamanan", icon: ShieldCheck, enabled: false },
+      { label: "Duplikasi", to: "/duplikasi", icon: CopySimple, enabled: true },
+      { label: "File Besar dan Usang", to: "/file-besar-usang", icon: Broom, enabled: true },
+      { label: "Keamanan File", to: "/keamanan", icon: ShieldCheck, enabled: true },
     ],
   },
   {
     heading: "PENGATURAN",
     items: [
       { label: "Akun Terhubung", to: "/pengaturan/akun", icon: PlugsConnected, enabled: true },
-      { label: "Keyword Sensitif", to: "/pengaturan/keyword", icon: Hash, enabled: false },
+      { label: "Keyword Sensitif", to: "/pengaturan/keyword", icon: Hash, enabled: true },
     ],
   },
 ]
