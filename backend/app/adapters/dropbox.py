@@ -238,14 +238,15 @@ class DropboxAdapter(BaseAdapter):
 
     def set_sharing_private(self, file_id: str) -> bool:
         links = self._public_links()
+        revoked_any = False
         for link in links:
             if getattr(link, "id", None) == file_id or getattr(link, "path_lower", None) == file_id.lower():
                 try:
                     self.client.sharing_revoke_shared_link(link.url)
                 except Exception as exc:
                     self._raise_dropbox_error(exc, "set_sharing_private", file_id=file_id)
-                return True
-        return False
+                revoked_any = True
+        return revoked_any
 
     def _public_links(self) -> list[Any]:
         try:
