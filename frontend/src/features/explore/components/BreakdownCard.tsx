@@ -3,12 +3,14 @@ import {
   getProviderLabel,
   ProviderLogo,
 } from "@/features/accounts/components/ProviderLogo"
+import type { QuotaAccount } from "@/features/explore/api"
 import { QuotaBar } from "@/shared/components/QuotaBar"
 import { StatusBadge, type BadgeVariant } from "@/shared/components/StatusBadge"
 import { formatBytes } from "@/shared/utils/formatSize"
 
 interface BreakdownCardProps {
   account: Account
+  quotaAccount?: QuotaAccount
 }
 
 const STATUS_LABEL: Record<Account["status"], { label: string; variant: BadgeVariant }> = {
@@ -19,9 +21,11 @@ const STATUS_LABEL: Record<Account["status"], { label: string; variant: BadgeVar
   revoked: { label: "Otorisasi dicabut", variant: "danger" },
 }
 
-export function BreakdownCard({ account }: BreakdownCardProps) {
+export function BreakdownCard({ account, quotaAccount }: BreakdownCardProps) {
   const meta = STATUS_LABEL[account.status]
   const hasData = account.status !== "never_synced"
+  const quotaUsedBytes = quotaAccount?.usedBytes ?? account.quotaUsedBytes
+  const quotaTotalBytes = quotaAccount?.totalBytes ?? account.quotaTotalBytes
 
   return (
     <article className="rounded-[--radius-sm] border border-line bg-bg px-3.5 py-3">
@@ -40,19 +44,19 @@ export function BreakdownCard({ account }: BreakdownCardProps) {
         {hasData ? (
           <>
             <p className="text-xs text-ink-soft">
-              <span className="font-medium">{formatBytes(account.quotaUsedBytes)}</span>{" "}
-              <span className="text-muted">/ {formatBytes(account.quotaTotalBytes)}</span>
+              <span className="font-medium">{formatBytes(quotaUsedBytes)}</span>{" "}
+              <span className="text-muted">/ {formatBytes(quotaTotalBytes)}</span>
             </p>
             <div className="mt-1.5">
               <QuotaBar
-                usedBytes={account.quotaUsedBytes}
-                totalBytes={account.quotaTotalBytes}
+                usedBytes={quotaUsedBytes}
+                totalBytes={quotaTotalBytes}
                 showLabel={false}
               />
             </div>
           </>
         ) : (
-          <p className="text-xs text-muted">— / {formatBytes(account.quotaTotalBytes)}</p>
+          <p className="text-xs text-muted">- / {formatBytes(quotaTotalBytes)}</p>
         )}
       </div>
     </article>

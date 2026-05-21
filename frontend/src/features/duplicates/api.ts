@@ -1,11 +1,5 @@
-import { simulateDelay } from "@/shared/api/mocks/accounts"
-import {
-  applyMockBatchDelete,
-  applyMockScanRefresh,
-  getMockGroupsResponse,
-  type DuplicateGroupResponse,
-  type DuplicateMemberResponse,
-} from "@/shared/api/mocks/duplicates"
+import { api } from "@/shared/api/client"
+import { waitForOperation } from "@/shared/api/operations"
 
 export type DuplicateTypeFilter =
   | "all"
@@ -16,6 +10,56 @@ export type DuplicateTypeFilter =
   | "other"
 
 export type Provider = "google" | "dropbox"
+
+interface DuplicateMemberResponse {
+  id: string
+  file_id: string
+  name: string
+  size_bytes: number | null
+  modified_at: string
+  account_id: string
+  account_email: string
+  provider: Provider
+  is_owned: boolean
+  deletable: boolean
+  deletable_reason: string | null
+  path: string | null
+  mime_type: string | null
+  type: string
+  web_view_link: string | null
+}
+
+interface DuplicateGroupResponse {
+  id: string
+  representative_name: string
+  members_count: number
+  total_size_bytes: number
+  match_basis: "hash" | "name_size"
+  members: DuplicateMemberResponse[]
+}
+
+interface DuplicatesScanResponse {
+  operation_id: string
+  operation_type: "duplicates_scan"
+  status: "queued" | "running"
+}
+
+interface BatchDeleteSuccessResponse {
+  id: string
+  success: true
+}
+
+interface BatchDeleteFailureResponse {
+  id: string
+  success: false
+  error_code: string
+  message: string
+}
+
+interface BatchDeleteResponse {
+  deleted: BatchDeleteSuccessResponse[]
+  failed: BatchDeleteFailureResponse[]
+}
 
 export interface DuplicateMember {
   id: string
@@ -30,7 +74,7 @@ export interface DuplicateMember {
   deletable: boolean
   deletableReason: string | null
   path: string | null
-  mimeType: string
+  mimeType: string | null
   type: string
   webViewLink: string | null
 }
@@ -40,9 +84,6 @@ export interface DuplicateGroup {
   representativeName: string
   membersCount: number
   totalSizeBytes: number
-  // match_basis sengaja tidak dimuat ke shape camelCase frontend karena
-  // tidak boleh dirender ke UI (FPS §2.6). Backend tetap kirim field-nya
-  // di response, mapper sengaja drop.
   members: DuplicateMember[]
 }
 
@@ -53,7 +94,7 @@ export interface ListDuplicateGroupsResult {
 }
 
 export interface BatchDeleteEntry {
-  fileId: string
+  id: string
   success: boolean
   errorCode?: string
   message?: string
@@ -69,7 +110,7 @@ function mapMember(raw: DuplicateMemberResponse): DuplicateMember {
     id: raw.id,
     fileId: raw.file_id,
     name: raw.name,
-    sizeBytes: raw.size_bytes,
+    sizeBytes: raw.size_bytes ?? 0,
     modifiedAt: raw.modified_at,
     accountId: raw.account_id,
     accountEmail: raw.account_email,
@@ -94,83 +135,49 @@ function mapGroup(raw: DuplicateGroupResponse): DuplicateGroup {
   }
 }
 
-// Logic duplikasi singkat dari Feature 3 (sengaja inline untuk strict
-// no-touch boundary Feature 3 per arahan Kai). Konsisten dengan mapping
-// Interface Contract §3.2.
-function categorizeFileType(mimeType: string): DuplicateTypeFilter {
-  const mime = mimeType.toLowerCase()
-  if (mime.startsWith("image/")) return "photo"
-  if (mime.startsWith("video/")) return "video"
-  if (mime.startsWith("audio/")) return "audio"
-  if (mime === "application/pdf") return "document"
-  if (mime.startsWith("application/vnd.openxmlformats-officedocument")) return "document"
-  if (mime.startsWith("application/vnd.google-apps")) return "document"
-  if (mime.startsWith("text/")) return "document"
-  return "other"
-}
-
 export interface ListDuplicatesParams {
   type?: DuplicateTypeFilter
   limit?: number
   offset?: number
 }
 
-// M4: replace body dengan
-//   `api.get<DuplicateGroupResponse[]>('/duplicates', { params: { type, limit, offset } })`.
-// Mapper dan signature dipertahankan.
 export async function listDuplicateGroups(
   params: ListDuplicatesParams = {},
 ): Promise<ListDuplicateGroupsResult> {
   const { type = "all", limit = 50, offset = 0 } = params
-  await simulateDelay(600)
-
-  const response = getMockGroupsResponse()
-  let groups = response.data.map(mapGroup)
-
-  if (type !== "all") {
-    groups = groups.filter((group) => {
-      // Filter berdasar member pertama (mengikuti spec implementasi backend
-      // §3.3). Grup hanya muncul jika ada member yang tipe-nya match.
-      const firstMember = group.members[0]
-      if (!firstMember) return false
-      return categorizeFileType(firstMember.mimeType) === type
-    })
-  }
-
-  const total = groups.length
-  const sliced = groups.slice(offset, offset + limit)
+  const response = await api.get<DuplicateGroupResponse[]>("/duplicates", {
+    params: { type, limit, offset },
+  })
 
   return {
-    groups: sliced,
-    total,
-    scanAt: response.meta && "scan_at" in response.meta
-      ? (response.meta.scan_at as string | null)
-      : null,
+    groups: response.data.map(mapGroup),
+    total:
+      typeof response.meta?.pagination?.total === "number"
+        ? response.meta.pagination.total
+        : response.data.length,
+    scanAt:
+      typeof response.meta?.scan_at === "string"
+        ? response.meta.scan_at
+        : null,
   }
 }
 
-// M4: replace dengan `api.post('/scan/duplicates')` + polling
-// `api.get('/operations/{operation_id}')` sampai status completed.
-// Saat ini mock cukup delay 1.5s lalu refresh timestamp.
 export async function scanDuplicates(): Promise<void> {
-  await simulateDelay(1500)
-  applyMockScanRefresh()
+  const response = await api.post<DuplicatesScanResponse>("/scan/duplicates")
+  await waitForOperation(response.data.operation_id)
 }
 
-// M4: replace dengan `api.delete('/files/batch', { file_ids })`. Response
-// shape sama (deleted + failed arrays). Mapper convert ke camelCase.
-export async function batchDeleteFiles(fileIds: string[]): Promise<BatchDeleteResult> {
-  await simulateDelay(700)
-  const result = applyMockBatchDelete(fileIds)
+export async function batchDeleteFiles(ids: string[]): Promise<BatchDeleteResult> {
+  const response = await api.post<BatchDeleteResponse>("/files/batch-delete", {
+    ids,
+  })
   return {
-    deleted: result.deleted.map((entry) => ({
-      fileId: entry.file_id,
+    deleted: response.data.deleted.map((entry) => ({
+      id: entry.id,
       success: entry.success,
-      errorCode: entry.error_code,
-      message: entry.message,
     })),
-    failed: result.failed.map((entry) => ({
-      fileId: entry.file_id,
+    failed: response.data.failed.map((entry) => ({
+      id: entry.id,
       success: entry.success,
       errorCode: entry.error_code,
       message: entry.message,

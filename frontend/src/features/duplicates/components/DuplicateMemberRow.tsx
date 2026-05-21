@@ -9,7 +9,7 @@ import { formatBytes } from "@/shared/utils/formatSize"
 interface DuplicateMemberRowProps {
   member: DuplicateMember
   isSelected: boolean
-  onToggleSelection: (fileId: string) => void
+  onToggleSelection: (id: string) => void
 }
 
 function openInProvider(href: string | null) {
@@ -28,7 +28,7 @@ export function DuplicateMemberRow({
   const metaLine = [
     member.accountEmail,
     providerLabel,
-    member.path,
+    member.path ?? "-",
     formatRelativeTime(member.modifiedAt),
   ]
     .filter(Boolean)
@@ -50,7 +50,7 @@ export function DuplicateMemberRow({
           type="checkbox"
           checked={isSelected}
           disabled={disabled}
-          onChange={() => onToggleSelection(member.fileId)}
+          onChange={() => onToggleSelection(member.id)}
           className="h-4 w-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={disabled ? reason : `Pilih ${member.name}`}
         />

@@ -13,9 +13,9 @@ interface DuplicatesUiStateValue {
   typeFilter: DuplicateTypeFilter
   setTypeFilter: (value: DuplicateTypeFilter) => void
   selectedFileIds: ReadonlySet<string>
-  toggleSelection: (fileId: string) => void
+  toggleSelection: (id: string) => void
   clearSelection: () => void
-  removeFromSelection: (fileIds: string[]) => void
+  removeFromSelection: (ids: string[]) => void
   openGroupIds: ReadonlySet<string>
   toggleOpenGroup: (groupId: string) => void
   resetOpenGroups: () => void
@@ -33,11 +33,11 @@ export function DuplicatesUiStateProvider({ children }: { children: ReactNode })
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
   const [openGroupIds, setOpenGroupIds] = useState<Set<string>>(new Set())
 
-  const toggleSelection = useCallback((fileId: string) => {
+  const toggleSelection = useCallback((id: string) => {
     setSelectedFileIds((prev) => {
       const next = new Set(prev)
-      if (next.has(fileId)) next.delete(fileId)
-      else next.add(fileId)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }, [])
@@ -46,11 +46,11 @@ export function DuplicatesUiStateProvider({ children }: { children: ReactNode })
     setSelectedFileIds(new Set())
   }, [])
 
-  const removeFromSelection = useCallback((fileIds: string[]) => {
-    if (fileIds.length === 0) return
+  const removeFromSelection = useCallback((ids: string[]) => {
+    if (ids.length === 0) return
     setSelectedFileIds((prev) => {
       const next = new Set(prev)
-      for (const id of fileIds) next.delete(id)
+      for (const id of ids) next.delete(id)
       return next
     })
   }, [])

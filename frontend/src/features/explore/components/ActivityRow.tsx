@@ -9,9 +9,7 @@ interface ActivityRowProps {
   file: ActivityFile
 }
 
-// "Buka" membuka link provider di tab baru. M4 nanti link real, di mock
-// URL-nya juga valid pattern (drive.google.com, dropbox.com) jadi klik tetap
-// produktif untuk verifikasi visual.
+// "Buka" membuka link provider di tab baru jika backend menyediakan link.
 function openInProvider(href: string | null) {
   if (!href) return
   window.open(href, "_blank", "noopener,noreferrer")
@@ -28,7 +26,7 @@ export function ActivityRow({ file }: ActivityRowProps) {
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-ink">{file.name}</p>
-            {file.path && <p className="truncate text-xs text-muted">{file.path}</p>}
+            <p className="truncate text-xs text-muted">{file.path ?? "-"}</p>
           </div>
         </div>
       </td>

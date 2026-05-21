@@ -9,7 +9,7 @@ interface DuplicateGroupAccordionProps {
   isOpen: boolean
   onToggleOpen: (groupId: string) => void
   selectedFileIds: ReadonlySet<string>
-  onToggleSelection: (fileId: string) => void
+  onToggleSelection: (id: string) => void
 }
 
 export function DuplicateGroupAccordion({
@@ -43,7 +43,7 @@ export function DuplicateGroupAccordion({
             <DuplicateMemberRow
               key={member.id}
               member={member}
-              isSelected={selectedFileIds.has(member.fileId)}
+              isSelected={selectedFileIds.has(member.id)}
               onToggleSelection={onToggleSelection}
             />
           ))}

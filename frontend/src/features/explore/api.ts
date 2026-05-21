@@ -1,18 +1,43 @@
-import {
-  mockActivityFiles,
-  mockActivityResponse,
-  type FileResponse,
-} from "@/shared/api/mocks/files"
-import { simulateDelay } from "@/shared/api/mocks/accounts"
+import { api } from "@/shared/api/client"
 
 export type Provider = "google" | "dropbox"
+
+export interface FileResponse {
+  id: string
+  file_id: string
+  name: string
+  type: string
+  mime_type: string | null
+  size_bytes: number | null
+  modified_at: string
+  account_id: string
+  account_email: string
+  provider: Provider
+  is_owned: boolean
+  path: string | null
+  web_view_link: string | null
+}
+
+interface QuotaAccountResponse {
+  account_id: string
+  provider: Provider
+  email: string
+  used_bytes: number
+  total_bytes: number
+}
+
+interface QuotaSummaryResponse {
+  total_used_bytes: number
+  total_capacity_bytes: number
+  per_account: QuotaAccountResponse[]
+}
 
 export interface ActivityFile {
   id: string
   fileId: string
   name: string
   type: string
-  mimeType: string
+  mimeType: string | null
   sizeBytes: number | null
   modifiedAt: string
   accountId: string
@@ -23,7 +48,21 @@ export interface ActivityFile {
   webViewLink: string | null
 }
 
-function mapFileResponse(raw: FileResponse): ActivityFile {
+export interface QuotaAccount {
+  accountId: string
+  provider: Provider
+  email: string
+  usedBytes: number
+  totalBytes: number
+}
+
+export interface QuotaSummary {
+  totalUsedBytes: number
+  totalCapacityBytes: number
+  perAccount: QuotaAccount[]
+}
+
+export function mapFileResponse(raw: FileResponse): ActivityFile {
   return {
     id: raw.id,
     fileId: raw.file_id,
@@ -41,28 +80,52 @@ function mapFileResponse(raw: FileResponse): ActivityFile {
   }
 }
 
+function mapQuotaSummary(raw: QuotaSummaryResponse): QuotaSummary {
+  return {
+    totalUsedBytes: raw.total_used_bytes,
+    totalCapacityBytes: raw.total_capacity_bytes,
+    perAccount: raw.per_account.map((account) => ({
+      accountId: account.account_id,
+      provider: account.provider,
+      email: account.email,
+      usedBytes: account.used_bytes,
+      totalBytes: account.total_bytes,
+    })),
+  }
+}
+
 export interface ActivityResult {
   files: ActivityFile[]
   snapshotAt: string | null
 }
 
-// Backend filter activity dengan join ke accounts dan skip account yang
-// belum pernah sync. Di mock, simulasi dengan menerima daftar account_id
-// yang sudah punya data (caller pass dari AccountsContext).
-//
-// M4: replace body dengan `api.get<FileResponse[]>('/files/activity?limit=...')`.
-// Backend yang melakukan filtering, parameter accountIds tidak dikirim — itu
-// hanya untuk mock simulation.
+export interface QuotaSummaryResult {
+  summary: QuotaSummary
+  snapshotAt: string | null
+}
+
 export async function listActivity(
-  options: { limit?: number; eligibleAccountIds?: Set<string> } = {},
+  options: { limit?: number; signal?: AbortSignal } = {},
 ): Promise<ActivityResult> {
-  const { limit = 10, eligibleAccountIds } = options
-  await simulateDelay(450)
-  const filtered = eligibleAccountIds
-    ? mockActivityFiles.filter((f) => eligibleAccountIds.has(f.account_id))
-    : mockActivityFiles
+  const limit = Math.min(options.limit ?? 10, 50)
+  const response = await api.get<FileResponse[]>("/files/activity", {
+    params: { limit },
+    signal: options.signal,
+  })
   return {
-    files: filtered.slice(0, limit).map(mapFileResponse),
-    snapshotAt: mockActivityResponse.meta?.snapshot_at ?? null,
+    files: response.data.map(mapFileResponse),
+    snapshotAt: response.meta?.snapshot_at ?? null,
+  }
+}
+
+export async function getQuotaSummary(
+  options: { signal?: AbortSignal } = {},
+): Promise<QuotaSummaryResult> {
+  const response = await api.get<QuotaSummaryResponse>("/quota", {
+    signal: options.signal,
+  })
+  return {
+    summary: mapQuotaSummary(response.data),
+    snapshotAt: response.meta?.snapshot_at ?? null,
   }
 }

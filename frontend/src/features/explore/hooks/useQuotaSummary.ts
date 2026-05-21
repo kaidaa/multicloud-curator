@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useState } from "react"
 
-import { listActivity, type ActivityFile } from "@/features/explore/api"
+import { getQuotaSummary, type QuotaSummary } from "@/features/explore/api"
 import { getErrorMessage } from "@/shared/api/errors"
 import { useAccountsContext } from "@/shared/contexts/AccountsContext"
 
-interface UseActivityOptions {
-  limit?: number
-}
-
-interface UseActivityResult {
-  files: ActivityFile[]
+interface UseQuotaSummaryResult {
+  summary: QuotaSummary | null
   isLoading: boolean
   error: string | null
   snapshotAt: string | null
@@ -20,9 +16,9 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError"
 }
 
-export function useActivity({ limit = 10 }: UseActivityOptions = {}): UseActivityResult {
+export function useQuotaSummary(): UseQuotaSummaryResult {
   const { globalRefreshVersion } = useAccountsContext()
-  const [files, setFiles] = useState<ActivityFile[]>([])
+  const [summary, setSummary] = useState<QuotaSummary | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null)
@@ -37,13 +33,14 @@ export function useActivity({ limit = 10 }: UseActivityOptions = {}): UseActivit
     setIsLoading(true)
     setError(null)
 
-    listActivity({ limit, signal: controller.signal })
+    getQuotaSummary({ signal: controller.signal })
       .then((result) => {
-        setFiles(result.files)
+        setSummary(result.summary)
         setSnapshotAt(result.snapshotAt)
       })
       .catch((err: unknown) => {
         if (isAbortError(err)) return
+        setSummary(null)
         setError(getErrorMessage(err))
       })
       .finally(() => {
@@ -54,7 +51,7 @@ export function useActivity({ limit = 10 }: UseActivityOptions = {}): UseActivit
     return () => {
       controller.abort()
     }
-  }, [limit, requestVersion, globalRefreshVersion])
+  }, [requestVersion, globalRefreshVersion])
 
-  return { files, isLoading, error, snapshotAt, refetch }
+  return { summary, isLoading, error, snapshotAt, refetch }
 }

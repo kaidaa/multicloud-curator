@@ -7,6 +7,7 @@ import {
   type SearchParams,
 } from "@/features/search/api"
 import { getErrorMessage } from "@/shared/api/errors"
+import { useAccountsContext } from "@/shared/contexts/AccountsContext"
 import { useDebouncedValue } from "@/shared/hooks/useDebouncedValue"
 
 interface UseSearchResult {
@@ -21,6 +22,7 @@ interface UseSearchResult {
 const DEBOUNCE_MS = 300
 
 export function useSearch(params: SearchParams): UseSearchResult {
+  const { globalRefreshVersion } = useAccountsContext()
   const debouncedQuery = useDebouncedValue(params.query, DEBOUNCE_MS)
 
   const [files, setFiles] = useState<ActivityFile[]>([])
@@ -32,6 +34,10 @@ export function useSearch(params: SearchParams): UseSearchResult {
   const trimmed = debouncedQuery.trim()
   const isBelowMinLength = trimmed.length < MIN_SEARCH_QUERY_LENGTH
 
+  function isAbortError(error: unknown): boolean {
+    return error instanceof Error && error.name === "AbortError"
+  }
+
   useEffect(() => {
     if (isBelowMinLength) {
       setFiles([])
@@ -41,30 +47,29 @@ export function useSearch(params: SearchParams): UseSearchResult {
       return
     }
 
-    let cancelled = false
+    const controller = new AbortController()
     setIsLoading(true)
     setError(null)
 
-    searchFiles({ ...params, query: trimmed })
+    searchFiles({ ...params, query: trimmed }, { signal: controller.signal })
       .then((result) => {
-        if (cancelled) return
         setFiles(result.files)
         setTotal(result.total)
         setSnapshotAt(result.snapshotAt)
       })
       .catch((err: unknown) => {
-        if (cancelled) return
+        if (isAbortError(err)) return
         setError(getErrorMessage(err))
         setFiles([])
         setTotal(0)
       })
       .finally(() => {
-        if (cancelled) return
+        if (controller.signal.aborted) return
         setIsLoading(false)
       })
 
     return () => {
-      cancelled = true
+      controller.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nilai dependent
     // sengaja di-spread supaya filter berubah trigger fetch ulang. params.query
@@ -78,6 +83,7 @@ export function useSearch(params: SearchParams): UseSearchResult {
     params.sort,
     params.limit,
     params.offset,
+    globalRefreshVersion,
   ])
 
   return { files, total, snapshotAt, isLoading, error, isBelowMinLength }

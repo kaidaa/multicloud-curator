@@ -1,8 +1,10 @@
 import type { Account } from "@/features/accounts/api"
+import type { QuotaSummary } from "@/features/explore/api"
 import { BreakdownCard } from "@/features/explore/components/BreakdownCard"
 
 interface BreakdownGridProps {
   accounts: Account[]
+  quotaSummary?: QuotaSummary | null
 }
 
 // Jumlah kolom adaptif berdasarkan jumlah akun supaya komposisi tetap
@@ -21,8 +23,11 @@ function computeBreakdownColumns(count: number): 1 | 2 | 3 {
   return 3
 }
 
-export function BreakdownGrid({ accounts }: BreakdownGridProps) {
+export function BreakdownGrid({ accounts, quotaSummary }: BreakdownGridProps) {
   const columns = computeBreakdownColumns(accounts.length)
+  const quotaByAccount = new Map(
+    quotaSummary?.perAccount.map((account) => [account.accountId, account]) ?? [],
+  )
   return (
     <section className="flex h-full flex-col overflow-hidden rounded-[--radius] border border-line bg-panel shadow-soft">
       <header className="border-b border-line px-5 py-4">
@@ -32,7 +37,11 @@ export function BreakdownGrid({ accounts }: BreakdownGridProps) {
       </header>
       <div className={`grid flex-1 gap-2 p-5 ${GRID_CLASS_BY_COLUMNS[columns]}`}>
         {accounts.map((account) => (
-          <BreakdownCard key={account.id} account={account} />
+          <BreakdownCard
+            key={account.id}
+            account={account}
+            quotaAccount={quotaByAccount.get(account.id)}
+          />
         ))}
       </div>
     </section>

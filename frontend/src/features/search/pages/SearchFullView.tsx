@@ -46,6 +46,18 @@ function parseOffset(value: string | null): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
 }
 
+const SEARCH_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
+
+function parseLimit(value: string | null): number {
+  if (!value) return DEFAULT_SEARCH_LIMIT
+  const parsed = Number.parseInt(value, 10)
+  return SEARCH_PAGE_SIZE_OPTIONS.includes(
+    parsed as (typeof SEARCH_PAGE_SIZE_OPTIONS)[number],
+  )
+    ? parsed
+    : DEFAULT_SEARCH_LIMIT
+}
+
 const TABLE_HEAD_CLASS =
   "px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted"
 
@@ -58,6 +70,7 @@ export function SearchFullView() {
   const provider = parseProvider(searchParams.get("provider"))
   const fileType = parseType(searchParams.get("type"))
   const sort = parseSort(searchParams.get("sort"))
+  const limit = parseLimit(searchParams.get("limit"))
   const offset = parseOffset(searchParams.get("offset"))
 
   const params = useMemo(
@@ -67,10 +80,10 @@ export function SearchFullView() {
       provider,
       fileType,
       sort,
-      limit: DEFAULT_SEARCH_LIMIT,
+      limit,
       offset,
     }),
-    [query, ownedOnly, provider, fileType, sort, offset],
+    [query, ownedOnly, provider, fileType, sort, limit, offset],
   )
 
   const { files, total, isLoading, error, isBelowMinLength } = useSearch(params)
@@ -126,10 +139,18 @@ export function SearchFullView() {
     setSearchParams(next, { replace: false })
   }
 
+  function handleLimitChange(nextLimit: number) {
+    const next = new URLSearchParams(searchParams)
+    if (nextLimit !== DEFAULT_SEARCH_LIMIT) next.set("limit", String(nextLimit))
+    else next.delete("limit")
+    next.delete("offset")
+    setSearchParams(next, { replace: true })
+  }
+
   const currentPageStart = total === 0 ? 0 : offset + 1
-  const currentPageEnd = Math.min(offset + DEFAULT_SEARCH_LIMIT, total)
+  const currentPageEnd = Math.min(offset + limit, total)
   const hasPrev = offset > 0
-  const hasNext = offset + DEFAULT_SEARCH_LIMIT < total
+  const hasNext = offset + limit < total
 
   return (
     <>
@@ -191,16 +212,30 @@ export function SearchFullView() {
         ) : (
           <>
             <div className="mb-3 flex items-center justify-between text-xs text-muted">
-              <span>
-                Menampilkan {currentPageStart}-{currentPageEnd} dari {total} hasil
-              </span>
+              <label className="inline-flex items-center gap-2">
+                <select
+                  value={limit}
+                  onChange={(event) => handleLimitChange(Number(event.target.value))}
+                  className="rounded-[--radius-sm] border border-line bg-panel px-2 py-1 text-xs text-ink-soft transition hover:border-line-strong focus:border-line-strong focus:outline-none"
+                  aria-label="Jumlah hasil per halaman"
+                >
+                  {SEARCH_PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <span>
+                  Menampilkan {currentPageStart}-{currentPageEnd} dari {total} hasil
+                </span>
+              </label>
             </div>
             <SearchResultsTable files={files} />
-            {total > DEFAULT_SEARCH_LIMIT && (
+            {total > limit && (
               <div className="mt-4 flex items-center justify-between">
                 <button
                   type="button"
-                  onClick={() => handlePageOffset(Math.max(0, offset - DEFAULT_SEARCH_LIMIT))}
+                  onClick={() => handlePageOffset(Math.max(0, offset - limit))}
                   disabled={!hasPrev}
                   className="inline-flex items-center gap-1.5 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -209,7 +244,7 @@ export function SearchFullView() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePageOffset(offset + DEFAULT_SEARCH_LIMIT)}
+                  onClick={() => handlePageOffset(offset + limit)}
                   disabled={!hasNext}
                   className="inline-flex items-center gap-1.5 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -229,14 +264,14 @@ function SearchResultsTable({ files }: { files: ActivityFile[] }) {
   return (
     <div className="overflow-hidden rounded-[--radius] border border-line bg-panel">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] text-sm">
+        <table className="w-full min-w-[780px] table-fixed text-sm">
           <thead className="border-b border-line">
             <tr>
-              <th className={`${TABLE_HEAD_CLASS} text-left`}>Nama file</th>
-              <th className={`${TABLE_HEAD_CLASS} text-left`}>Akun + provider</th>
-              <th className={`${TABLE_HEAD_CLASS} text-left`}>Path</th>
-              <th className={`${TABLE_HEAD_CLASS} text-left`}>Modifikasi</th>
-              <th className={`${TABLE_HEAD_CLASS} text-right`}>Aksi</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[38%] text-left`}>Nama file</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[24%] text-left`}>Akun + provider</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[20%] text-left`}>Path</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[12%] text-left`}>Modifikasi</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[96px] text-right`}>Aksi</th>
             </tr>
           </thead>
           <tbody>
@@ -247,15 +282,15 @@ function SearchResultsTable({ files }: { files: ActivityFile[] }) {
                     <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[--radius-sm] bg-panel-soft text-ink-soft">
                       <FileIcon type={file.type} mimeType={file.mimeType} size={18} />
                     </span>
-                    <p className="truncate text-sm font-medium text-ink">{file.name}</p>
+                    <p className="min-w-0 truncate text-sm font-medium text-ink">{file.name}</p>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-ink-soft">
                   <p className="truncate">{file.accountEmail}</p>
                   <p className="text-xs text-muted">{getProviderLabel(file.provider)}</p>
                 </td>
-                <td className="px-4 py-3 text-xs text-muted">
-                  {file.path ?? "—"}
+                <td className="truncate px-4 py-3 text-xs text-muted">
+                  {file.path ?? "-"}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-soft">
                   {formatRelativeTime(file.modifiedAt)}
@@ -270,7 +305,7 @@ function SearchResultsTable({ files }: { files: ActivityFile[] }) {
                         }
                       }}
                       disabled={!file.webViewLink}
-                      className="inline-flex items-center gap-1 rounded-[--radius-sm] border border-line bg-panel px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex max-w-full items-center gap-1 rounded-[--radius-sm] border border-line bg-panel px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <ArrowSquareOut size={13} weight="bold" />
                       <span>Buka</span>
@@ -290,14 +325,14 @@ function SearchResultsSkeleton() {
   return (
     <div className="overflow-hidden rounded-[--radius] border border-line bg-panel">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] text-sm">
+        <table className="w-full min-w-[780px] table-fixed text-sm">
           <thead className="border-b border-line">
             <tr>
-              <th className={`${TABLE_HEAD_CLASS} text-left`}>Nama file</th>
-              <th className={`${TABLE_HEAD_CLASS} text-left`}>Akun + provider</th>
-              <th className={`${TABLE_HEAD_CLASS} text-left`}>Path</th>
-              <th className={`${TABLE_HEAD_CLASS} text-left`}>Modifikasi</th>
-              <th className={`${TABLE_HEAD_CLASS} text-right`}>Aksi</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[38%] text-left`}>Nama file</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[24%] text-left`}>Akun + provider</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[20%] text-left`}>Path</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[12%] text-left`}>Modifikasi</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[96px] text-right`}>Aksi</th>
             </tr>
           </thead>
           <tbody>

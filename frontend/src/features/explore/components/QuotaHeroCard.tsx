@@ -1,19 +1,29 @@
 import { WarningCircle } from "@phosphor-icons/react"
 
 import type { Account } from "@/features/accounts/api"
+import type { QuotaSummary } from "@/features/explore/api"
 import { formatBytes } from "@/shared/utils/formatSize"
 
 interface QuotaHeroCardProps {
   accounts: Account[]
+  quotaSummary?: QuotaSummary | null
   // Akun yang status-nya bermasalah ditampilkan sebagai catatan: angka kuota
   // di hero card mencerminkan sinkronisasi terakhir, bukan kondisi real-time.
   problemAccounts: Account[]
 }
 
-export function QuotaHeroCard({ accounts, problemAccounts }: QuotaHeroCardProps) {
+export function QuotaHeroCard({
+  accounts,
+  quotaSummary,
+  problemAccounts,
+}: QuotaHeroCardProps) {
   const syncedAccounts = accounts.filter((a) => a.status !== "never_synced")
-  const totalUsed = syncedAccounts.reduce((sum, a) => sum + a.quotaUsedBytes, 0)
-  const totalCapacity = syncedAccounts.reduce((sum, a) => sum + a.quotaTotalBytes, 0)
+  const totalUsed =
+    quotaSummary?.totalUsedBytes ??
+    syncedAccounts.reduce((sum, a) => sum + a.quotaUsedBytes, 0)
+  const totalCapacity =
+    quotaSummary?.totalCapacityBytes ??
+    syncedAccounts.reduce((sum, a) => sum + a.quotaTotalBytes, 0)
   const percent =
     totalCapacity > 0 ? Math.min(Math.round((totalUsed / totalCapacity) * 100), 100) : 0
 

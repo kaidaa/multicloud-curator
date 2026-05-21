@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   ArrowsClockwise,
+  CaretLeft,
+  CaretRight,
   CircleNotch,
   CopySimple,
   Funnel,
@@ -21,6 +23,9 @@ import { Skeleton } from "@/shared/components/LoadingState"
 import { useToast } from "@/shared/hooks/useToast"
 import { formatDateID } from "@/shared/utils/formatDate"
 
+const DUPLICATES_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
+const DEFAULT_DUPLICATES_PAGE_SIZE = 10
+
 export function DuplicatesPage() {
   const {
     typeFilter,
@@ -34,14 +39,30 @@ export function DuplicatesPage() {
     resetOpenGroups,
   } = useDuplicatesUiState()
 
+  const [offset, setOffset] = useState(0)
+  const [pageSize, setPageSize] = useState(DEFAULT_DUPLICATES_PAGE_SIZE)
+
   const { groups, total, scanAt, isLoading, error, refetch, scan, batchDelete } =
-    useDuplicates({ typeFilter })
+    useDuplicates({
+      typeFilter,
+      limit: pageSize,
+      offset,
+    })
 
   const { accounts } = useAccounts()
   const { pushToast } = useToast()
 
   const [isScanning, setIsScanning] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (isLoading || offset === 0 || offset < total) return
+    const lastValidOffset =
+      total > 0
+        ? Math.floor((total - 1) / pageSize) * pageSize
+        : 0
+    setOffset(lastValidOffset)
+  }, [isLoading, offset, pageSize, total])
 
   const problemAccounts = useMemo(
     () =>
@@ -70,11 +91,11 @@ export function DuplicatesPage() {
       groups.map((group) => ({
         ...group,
         members: group.members.map((member) => {
-          if (!member.isOwned) return member
+          if (!member.deletable) return member
 
           const status = accountStatusMap.get(member.accountId)
           if (status === "active") {
-            return { ...member, deletable: true, deletableReason: null }
+            return member
           }
 
           return {
@@ -97,7 +118,7 @@ export function DuplicatesPage() {
     const map = new Map<string, DuplicateMember>()
     for (const group of effectiveGroups) {
       for (const member of group.members) {
-        map.set(member.fileId, member)
+        map.set(member.id, member)
       }
     }
     return map
@@ -105,8 +126,8 @@ export function DuplicatesPage() {
 
   const selectedMembers = useMemo<DuplicateMember[]>(() => {
     const result: DuplicateMember[] = []
-    for (const fileId of selectedFileIds) {
-      const member = memberIndex.get(fileId)
+    for (const id of selectedFileIds) {
+      const member = memberIndex.get(id)
       if (member) result.push(member)
     }
     return result
@@ -118,11 +139,31 @@ export function DuplicatesPage() {
     [selectedMembers],
   )
 
+  const currentPageStart = total === 0 ? 0 : offset + 1
+  const currentPageEnd = Math.min(offset + effectiveGroups.length, total)
+  const hasPrevPage = offset > 0
+  const hasNextPage = offset + pageSize < total
+
+  function handleTypeFilterChange(value: typeof typeFilter) {
+    setOffset(0)
+    setTypeFilter(value)
+  }
+
+  function handlePageOffset(nextOffset: number) {
+    setOffset(Math.max(0, nextOffset))
+  }
+
+  function handlePageSizeChange(nextPageSize: number) {
+    setPageSize(nextPageSize)
+    setOffset(0)
+  }
+
   async function handleScanClick() {
     if (isScanning) return
     setIsScanning(true)
     try {
       await scan()
+      setOffset(0)
       clearSelection()
       resetOpenGroups()
       pushToast(`Scan selesai. ${total} grup ditemukan.`, "info")
@@ -137,17 +178,17 @@ export function DuplicatesPage() {
   }
 
   async function handleConfirmDelete() {
-    const fileIds = [...selectedFileIds]
-    if (fileIds.length === 0) return
+    const ids = [...selectedFileIds]
+    if (ids.length === 0) return
     try {
-      const result = await batchDelete(fileIds)
+      const result = await batchDelete(ids)
       if (result.deleted.length > 0) {
-        removeFromSelection(result.deleted.map((d) => d.fileId))
+        removeFromSelection(result.deleted.map((d) => d.id))
         pushToast(`${result.deleted.length} file berhasil dihapus.`, "success")
       }
       if (result.failed.length > 0) {
         const failedNames = result.failed
-          .map((f) => f.message ?? f.errorCode ?? f.fileId)
+          .map((f) => f.message ?? f.errorCode ?? f.id)
           .join("; ")
         pushToast(
           `${result.failed.length} file gagal dihapus: ${failedNames}`,
@@ -187,7 +228,7 @@ export function DuplicatesPage() {
                 </span>
                 <span>·</span>
                 <span>
-                  <strong className="font-semibold text-ink-soft">{totalFiles}</strong> file
+                  <strong className="font-semibold text-ink-soft">{totalFiles}</strong> file di halaman ini
                 </span>
               </>
             )}
@@ -208,7 +249,7 @@ export function DuplicatesPage() {
         <div className="mt-6">
           <DuplicatesToolbar
             typeFilter={typeFilter}
-            onTypeFilterChange={setTypeFilter}
+            onTypeFilterChange={handleTypeFilterChange}
             isScanning={isScanning}
             onScanClick={() => void handleScanClick()}
             selectedCount={selectedCount}
@@ -258,7 +299,7 @@ export function DuplicatesPage() {
                 action={
                   <button
                     type="button"
-                    onClick={() => setTypeFilter("all")}
+                    onClick={() => handleTypeFilterChange("all")}
                     className="inline-flex items-center gap-2 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft"
                   >
                     Tampilkan semua tipe
@@ -302,18 +343,65 @@ export function DuplicatesPage() {
             />
           )
         ) : (
-          <div className="space-y-2">
-            {effectiveGroups.map((group) => (
-              <DuplicateGroupAccordion
-                key={group.id}
-                group={group}
-                isOpen={openGroupIds.has(group.id)}
-                onToggleOpen={toggleOpenGroup}
-                selectedFileIds={selectedFileIds}
-                onToggleSelection={toggleSelection}
-              />
-            ))}
-          </div>
+          <>
+            <div className="mb-3 flex items-center gap-2 text-xs text-muted">
+              <select
+                value={pageSize}
+                onChange={(event) =>
+                  handlePageSizeChange(Number(event.target.value))
+                }
+                className="rounded-[--radius-sm] border border-line bg-panel px-2 py-1 text-xs text-ink-soft transition hover:border-line-strong focus:border-line-strong focus:outline-none"
+                aria-label="Jumlah grup per halaman"
+              >
+                {DUPLICATES_PAGE_SIZE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <span>
+                Menampilkan {currentPageStart}-{currentPageEnd} dari {total} grup
+              </span>
+            </div>
+            <div className="space-y-2">
+              {effectiveGroups.map((group) => (
+                <DuplicateGroupAccordion
+                  key={group.id}
+                  group={group}
+                  isOpen={openGroupIds.has(group.id)}
+                  onToggleOpen={toggleOpenGroup}
+                  selectedFileIds={selectedFileIds}
+                  onToggleSelection={toggleSelection}
+                />
+              ))}
+            </div>
+            {total > pageSize && (
+              <div className="mt-4 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handlePageOffset(offset - pageSize)
+                  }
+                  disabled={!hasPrevPage}
+                  className="inline-flex items-center gap-1.5 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CaretLeft size={14} weight="bold" />
+                  <span>Sebelumnya</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handlePageOffset(offset + pageSize)
+                  }
+                  disabled={!hasNextPage}
+                  className="inline-flex items-center gap-1.5 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span>Berikutnya</span>
+                  <CaretRight size={14} weight="bold" />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
 

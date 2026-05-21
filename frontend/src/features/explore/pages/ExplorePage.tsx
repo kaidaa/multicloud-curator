@@ -8,6 +8,7 @@ import { BreakdownGrid } from "@/features/explore/components/BreakdownGrid"
 import { QuotaHeroCard } from "@/features/explore/components/QuotaHeroCard"
 import { SearchTriggerButton } from "@/features/explore/components/SearchTriggerButton"
 import { useActivity } from "@/features/explore/hooks/useActivity"
+import { useQuotaSummary } from "@/features/explore/hooks/useQuotaSummary"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { Skeleton } from "@/shared/components/LoadingState"
 import { useToast } from "@/shared/hooks/useToast"
@@ -18,19 +19,8 @@ export function ExplorePage() {
   const { pushToast } = useToast()
   const navigate = useNavigate()
 
-  // Activity hanya menampilkan file dari akun yang sudah pernah sync.
-  // Account dengan status `never_synced` belum punya data di sistem.
-  const eligibleAccountIds = useMemo(
-    () =>
-      new Set(
-        accountsApi.accounts
-          .filter((a) => a.status !== "never_synced")
-          .map((a) => a.id),
-      ),
-    [accountsApi.accounts],
-  )
-
-  const activity = useActivity({ limit: 10, eligibleAccountIds })
+  const activity = useActivity({ limit: 10 })
+  const quota = useQuotaSummary()
 
   const problemAccounts = useMemo(
     () =>
@@ -51,6 +41,8 @@ export function ExplorePage() {
       await Promise.all(
         pendingAccounts.map((a) => accountsApi.refreshAccount(a.id)),
       )
+      activity.refetch()
+      quota.refetch()
       pushToast("Metadata akun berhasil dimuat.", "success")
     } catch {
       pushToast("Sebagian akun gagal dimuat. Periksa halaman Akun Terhubung.", "error")
@@ -58,6 +50,8 @@ export function ExplorePage() {
   }
 
   const isInitialAccountsLoading = accountsApi.isLoading
+  const snapshotAt =
+    activity.snapshotAt ?? quota.snapshotAt ?? accountsApi.snapshotAt
 
   if (isInitialAccountsLoading) {
     return (
@@ -75,7 +69,7 @@ export function ExplorePage() {
   if (!accountsApi.error && accountsApi.accounts.length === 0) {
     return (
       <>
-        <ExploreHeader snapshotAt={accountsApi.snapshotAt} />
+        <ExploreHeader snapshotAt={snapshotAt} />
         <div className="mt-8">
           <EmptyState
             icon={<Plugs size={28} weight="duotone" />}
@@ -99,7 +93,7 @@ export function ExplorePage() {
 
   return (
     <>
-      <ExploreHeader snapshotAt={accountsApi.snapshotAt} />
+      <ExploreHeader snapshotAt={snapshotAt} />
 
       <div className="mt-6">
         <SearchTriggerButton />
@@ -109,6 +103,13 @@ export function ExplorePage() {
         <div className="mt-4 rounded-[--radius] border border-danger-strong/30 bg-danger-soft px-5 py-4 text-sm text-danger-strong">
           <p className="font-medium">Gagal memuat daftar akun.</p>
           <p className="mt-1 text-xs">{accountsApi.error}</p>
+        </div>
+      )}
+
+      {quota.error && (
+        <div className="mt-4 rounded-[--radius] border border-warning-strong/20 bg-warning-soft px-5 py-4 text-sm text-warning-strong">
+          <p className="font-medium">Ringkasan kuota belum bisa dimuat.</p>
+          <p className="mt-1 text-xs">{quota.error}</p>
         </div>
       )}
 
@@ -141,8 +142,12 @@ export function ExplorePage() {
         <QuotaHeroCard
           accounts={accountsApi.accounts}
           problemAccounts={problemAccounts}
+          quotaSummary={quota.summary}
         />
-        <BreakdownGrid accounts={accountsApi.accounts} />
+        <BreakdownGrid
+          accounts={accountsApi.accounts}
+          quotaSummary={quota.summary}
+        />
       </div>
 
       <section className="mt-8">
@@ -160,6 +165,7 @@ export function ExplorePage() {
           files={activity.files}
           isLoading={activity.isLoading}
           error={activity.error}
+          onRetry={activity.refetch}
         />
       </section>
     </>
