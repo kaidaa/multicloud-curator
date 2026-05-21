@@ -14,6 +14,18 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Layanan penyimpanan sedang tidak tersedia. Coba lagi nanti.",
   scope_insufficient:
     "Akun tidak memiliki izin yang cukup untuk operasi ini.",
+  account_mismatch:
+    "Akun yang dipilih berbeda dari akun yang sedang diotorisasi ulang.",
+  invalid_state: "Sesi otorisasi sudah kedaluwarsa. Coba hubungkan akun lagi.",
+  oauth_scope_error:
+    "Izin yang diberikan belum lengkap. Coba ulangi otorisasi akun.",
+  oauth_token_error:
+    "Otorisasi provider gagal diproses. Coba hubungkan akun lagi.",
+  oauth_callback_failed:
+    "Callback otorisasi gagal diproses. Coba hubungkan akun lagi.",
+  operation_failed: "Operasi gagal diproses.",
+  not_owned: "Aksi ini hanya bisa dilakukan pada file milik akun Anda.",
+  not_public: "File ini sudah tidak memiliki akses publik.",
   not_found: "Sumber daya yang diminta tidak ditemukan.",
   network_error: "Tidak bisa terhubung ke server. Cek koneksi internet.",
 }

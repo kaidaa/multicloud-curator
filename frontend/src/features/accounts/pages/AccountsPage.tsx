@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { Plugs, Plus, WarningCircle } from "@phosphor-icons/react"
 
 import type { Account, Provider } from "@/features/accounts/api"
@@ -13,6 +14,22 @@ import { useToast } from "@/shared/hooks/useToast"
 
 const TABLE_HEAD_CLASS =
   "px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted"
+
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  account_mismatch:
+    "Akun provider yang dipilih berbeda dari akun yang sedang diotorisasi ulang.",
+  invalid_state: "Sesi otorisasi sudah kedaluwarsa. Coba hubungkan akun lagi.",
+  oauth_scope_error:
+    "Izin yang diberikan belum lengkap. Coba ulangi otorisasi akun.",
+  oauth_token_error:
+    "Otorisasi provider gagal diproses. Coba hubungkan akun lagi.",
+  oauth_callback_failed:
+    "Callback otorisasi gagal diproses. Coba hubungkan akun lagi.",
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError"
+}
 
 function AccountsTableHead() {
   return (
@@ -32,8 +49,11 @@ function AccountsTableHead() {
 export function AccountsPage() {
   const accountsApi = useAccounts()
   const { pushToast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const processedOAuthCallbackRef = useRef<string | null>(null)
   const [connectOpen, setConnectOpen] = useState(false)
   const [disconnectTarget, setDisconnectTarget] = useState<Account | null>(null)
+  const refetchAccounts = accountsApi.refetch
 
   const problemAccounts = useMemo(
     () =>
@@ -43,14 +63,47 @@ export function AccountsPage() {
     [accountsApi.accounts],
   )
 
-  async function handleConnect(provider: Provider) {
-    try {
-      const newAccount = await accountsApi.connectAccount(provider)
-      setConnectOpen(false)
+  useEffect(() => {
+    const status = searchParams.get("status")
+    if (!status) return
+
+    const callbackKey = searchParams.toString()
+    if (processedOAuthCallbackRef.current === callbackKey) return
+    processedOAuthCallbackRef.current = callbackKey
+
+    const email = searchParams.get("email")
+    const error = searchParams.get("error")
+
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete("status")
+    nextParams.delete("provider")
+    nextParams.delete("email")
+    nextParams.delete("error")
+    setSearchParams(nextParams, { replace: true })
+
+    if (status === "connected") {
       pushToast(
-        `Akun ${newAccount.email} terhubung. Picu refresh untuk memuat metadata.`,
+        email
+          ? `Akun ${email} terhubung. Picu refresh untuk memuat metadata lengkap.`
+          : "Akun terhubung. Picu refresh untuk memuat metadata lengkap.",
         "success",
       )
+      void refetchAccounts()
+    } else if (status === "failed") {
+      pushToast(
+        error && OAUTH_ERROR_MESSAGES[error]
+          ? OAUTH_ERROR_MESSAGES[error]
+          : "Otorisasi akun gagal. Coba hubungkan akun lagi.",
+        "error",
+      )
+      void refetchAccounts()
+    }
+  }, [pushToast, refetchAccounts, searchParams, setSearchParams])
+
+  async function handleConnect(provider: Provider) {
+    try {
+      setConnectOpen(false)
+      await accountsApi.connectAccount(provider)
     } catch (err) {
       pushToast(getErrorMessage(err), "error")
     }
@@ -61,6 +114,7 @@ export function AccountsPage() {
       await accountsApi.refreshAccount(accountId)
       pushToast("Metadata akun berhasil dimuat.", "success")
     } catch (err) {
+      if (isAbortError(err)) return
       pushToast(getErrorMessage(err), "error")
     }
   }
@@ -68,7 +122,6 @@ export function AccountsPage() {
   async function handleReauthorize(accountId: string) {
     try {
       await accountsApi.reauthorizeAccount(accountId)
-      pushToast("Otorisasi akun berhasil diperbarui.", "success")
     } catch (err) {
       pushToast(getErrorMessage(err), "error")
     }

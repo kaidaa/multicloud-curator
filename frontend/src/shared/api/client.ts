@@ -8,6 +8,9 @@ import type { ApiErrorPayload, ApiResponse } from "@/shared/api/types"
 
 const BASE_URL = "/api"
 
+export type QueryParamValue = string | number | boolean | null | undefined
+export type QueryParams = Record<string, QueryParamValue>
+
 export class ApiClientError extends Error {
   public readonly code: string
   public readonly status: number
@@ -22,15 +25,55 @@ export class ApiClientError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...init?.headers,
-    },
-  })
+interface ApiRequestOptions extends RequestInit {
+  params?: QueryParams
+}
+
+function withQueryParams(path: string, params?: QueryParams): string {
+  if (!params) return path
+
+  const searchParams = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined) continue
+    searchParams.set(key, String(value))
+  }
+
+  const query = searchParams.toString()
+  if (!query) return path
+
+  return `${path}${path.includes("?") ? "&" : "?"}${query}`
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError"
+}
+
+async function request<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<ApiResponse<T>> {
+  const { params, ...init } = options
+  let response: Response
+
+  try {
+    response = await fetch(`${BASE_URL}${withQueryParams(path, params)}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...init.headers,
+      },
+    })
+  } catch (error) {
+    if (isAbortError(error)) throw error
+    throw new ApiClientError(
+      {
+        code: "network_error",
+        message: "Tidak bisa terhubung ke backend.",
+      },
+      0,
+    )
+  }
 
   if (response.status === 204) {
     return { data: null as unknown as T }
@@ -64,16 +107,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
+  get: <T>(path: string, options?: ApiRequestOptions) =>
+    request<T>(path, { ...options, method: "GET" }),
+  post: <T>(path: string, body?: unknown, options?: ApiRequestOptions) =>
     request<T>(path, {
+      ...options,
       method: "POST",
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
-  patch: <T>(path: string, body?: unknown) =>
+  patch: <T>(path: string, body?: unknown, options?: ApiRequestOptions) =>
     request<T>(path, {
+      ...options,
       method: "PATCH",
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
-  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  delete: <T>(path: string, options?: ApiRequestOptions) =>
+    request<T>(path, { ...options, method: "DELETE" }),
 }
