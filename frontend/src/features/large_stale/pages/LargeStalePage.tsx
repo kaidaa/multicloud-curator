@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Broom, Funnel, Plugs, WarningCircle } from "@phosphor-icons/react"
 import { useNavigate } from "react-router-dom"
 
@@ -13,8 +13,11 @@ import { useLargeStaleUiState } from "@/features/large_stale/contexts/LargeStale
 import { useLargeStale } from "@/features/large_stale/hooks/useLargeStale"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { useToast } from "@/shared/hooks/useToast"
+import { getAccountLifecycleSummary } from "@/shared/utils/accountLifecycle"
 import { formatBytes } from "@/shared/utils/formatSize"
 import { formatDateID } from "@/shared/utils/formatDate"
+
+const LARGE_STALE_PAGE_LIMIT = 50
 
 export function LargeStalePage() {
   const {
@@ -23,12 +26,23 @@ export function LargeStalePage() {
     sortBy,
     setSortBy,
     selectedFileIds,
+    hasRequestedScan,
+    markScanRequested,
     toggleSelection,
+    clearSelection,
     removeFromSelection,
   } = useLargeStaleUiState()
 
+  const [offset, setOffset] = useState(0)
+
   const { files, total, thresholds, snapshotAt, isLoading, error, refetch, refresh, batchDelete } =
-    useLargeStale({ typeFilter, sortBy })
+    useLargeStale({
+      typeFilter,
+      sortBy,
+      limit: LARGE_STALE_PAGE_LIMIT,
+      offset,
+      enabled: hasRequestedScan,
+    })
 
   const { accounts } = useAccounts()
   const { pushToast } = useToast()
@@ -37,20 +51,28 @@ export function LargeStalePage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
 
-  const problemAccounts = useMemo(
-    () =>
-      accounts.filter(
-        (a) => a.status === "token_invalid" || a.status === "revoked",
-      ),
+  useEffect(() => {
+    if (isLoading || offset === 0 || offset < total) return
+    const lastValidOffset =
+      total > 0
+        ? Math.floor((total - 1) / LARGE_STALE_PAGE_LIMIT) * LARGE_STALE_PAGE_LIMIT
+        : 0
+    clearSelection()
+    setOffset(lastValidOffset)
+  }, [clearSelection, isLoading, offset, total])
+
+  const { hasActiveAccounts, problemAccounts } = useMemo(
+    () => getAccountLifecycleSummary(accounts),
     [accounts],
   )
 
-  // Status akun bersifat dinamis (user bisa reauthorize kapan saja),
-  // sedangkan field `deletable`/`deletableReason` di mock adalah snapshot
-  // saat scan terakhir. Derive ulang supaya row actionability sinkron
-  // dengan AccountsContext tanpa perlu re-scan. Healthy strict = "active"
-  // saja (per FPS): syncing/never_synced/token_invalid/revoked semuanya
-  // disable destructive action.
+  useEffect(() => {
+    if (hasActiveAccounts && hasRequestedScan) return
+    clearSelection()
+  }, [clearSelection, hasActiveAccounts, hasRequestedScan])
+
+  // Overlay status akun terkini hanya boleh menambah disable state; backend
+  // `deletable=false` tetap menang.
   const accountStatusMap = useMemo(() => {
     const map = new Map<string, Account["status"]>()
     for (const account of accounts) {
@@ -62,13 +84,19 @@ export function LargeStalePage() {
   const effectiveFiles = useMemo<LargeStaleFile[]>(
     () =>
       files.map((file) => {
-        // Shared dari akun lain: alasan permanen non-deletable tidak
-        // bergantung status akun. Pertahankan seed apa adanya.
-        if (!file.isOwned) return file
+        if (!file.deletable) return file
+        if (!file.isOwned) {
+          return {
+            ...file,
+            deletable: false,
+            deletableReason:
+              file.deletableReason ?? "File shared tidak bisa dihapus dari aplikasi ini",
+          }
+        }
 
         const status = accountStatusMap.get(file.accountId)
         if (status === "active") {
-          return { ...file, deletable: true, deletableReason: null }
+          return file
         }
 
         return {
@@ -89,15 +117,15 @@ export function LargeStalePage() {
   const fileIndex = useMemo(() => {
     const map = new Map<string, LargeStaleFile>()
     for (const file of effectiveFiles) {
-      map.set(file.fileId, file)
+      map.set(file.id, file)
     }
     return map
   }, [effectiveFiles])
 
   const selectedFiles = useMemo<LargeStaleFile[]>(() => {
     const result: LargeStaleFile[] = []
-    for (const fileId of selectedFileIds) {
-      const file = fileIndex.get(fileId)
+    for (const id of selectedFileIds) {
+      const file = fileIndex.get(id)
       if (file) result.push(file)
     }
     return result
@@ -109,12 +137,37 @@ export function LargeStalePage() {
     [selectedFiles],
   )
 
+  const currentPageStart = total === 0 ? 0 : offset + 1
+  const currentPageEnd = Math.min(offset + effectiveFiles.length, total)
+  const hasPrevPage = offset > 0
+  const hasNextPage = offset + LARGE_STALE_PAGE_LIMIT < total
+
+  function handleTypeFilterChange(value: typeof typeFilter) {
+    clearSelection()
+    setOffset(0)
+    setTypeFilter(value)
+  }
+
+  function handleSortChange(value: typeof sortBy) {
+    clearSelection()
+    setOffset(0)
+    setSortBy(value)
+  }
+
+  function handlePageOffset(nextOffset: number) {
+    clearSelection()
+    setOffset(Math.max(0, nextOffset))
+  }
+
   async function handleScanRefresh() {
-    if (isRefreshing) return
+    if (isRefreshing || !hasActiveAccounts) return
     setIsRefreshing(true)
     try {
       await refresh()
-      pushToast(`Scan selesai. ${total} kandidat ditemukan.`, "info")
+      markScanRequested()
+      setOffset(0)
+      clearSelection()
+      pushToast("Daftar kandidat diperbarui.", "info")
     } catch (err) {
       pushToast(
         err instanceof Error ? err.message : "Scan ulang gagal. Coba lagi.",
@@ -126,17 +179,17 @@ export function LargeStalePage() {
   }
 
   async function handleConfirmDelete() {
-    const fileIds = [...selectedFileIds]
-    if (fileIds.length === 0) return
+    const ids = [...selectedFileIds]
+    if (ids.length === 0) return
     try {
-      const result = await batchDelete(fileIds)
+      const result = await batchDelete(ids)
       if (result.deleted.length > 0) {
-        removeFromSelection(result.deleted.map((d) => d.fileId))
+        removeFromSelection(result.deleted.map((d) => d.id))
         pushToast(`${result.deleted.length} file berhasil dihapus.`, "success")
       }
       if (result.failed.length > 0) {
         const failedNames = result.failed
-          .map((f) => f.message ?? f.errorCode ?? f.fileId)
+          .map((f) => f.message ?? f.errorCode ?? f.id)
           .join("; ")
         pushToast(
           `${result.failed.length} file gagal dihapus: ${failedNames}`,
@@ -153,7 +206,7 @@ export function LargeStalePage() {
   }
 
   const hasAccounts = accounts.length > 0
-  const hasData = effectiveFiles.length > 0
+  const hasData = hasRequestedScan && effectiveFiles.length > 0
   const filterActive = typeFilter !== "all"
 
   return (
@@ -164,7 +217,7 @@ export function LargeStalePage() {
         <p className="mt-2 max-w-2xl text-sm text-muted">
           Kandidat pembersihan berdasarkan ukuran besar atau usia lama. Hanya file milik Anda yang dapat dihapus.
         </p>
-        {snapshotAt && (
+        {hasActiveAccounts && hasRequestedScan && snapshotAt && (
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-2">
             <span>
               Scan terakhir: <strong className="font-semibold text-ink-soft">{formatDateID(snapshotAt)}</strong>
@@ -177,7 +230,7 @@ export function LargeStalePage() {
                 </span>
                 <span>·</span>
                 <span>
-                  <strong className="font-semibold text-ink-soft">{formatBytes(totalSize)}</strong>
+                  <strong className="font-semibold text-ink-soft">{formatBytes(totalSize)}</strong> di halaman ini
                 </span>
               </>
             )}
@@ -212,20 +265,57 @@ export function LargeStalePage() {
             }
           />
         </div>
+      ) : !hasActiveAccounts ? (
+        <div className="mt-8">
+          <EmptyState
+            icon={<Broom size={28} weight="duotone" />}
+            title="Belum ada akun dengan data lengkap"
+            description="Scan file besar dan usang tersedia setelah minimal satu akun selesai dimuat."
+            action={
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-2 rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-medium text-white opacity-50 disabled:cursor-not-allowed"
+              >
+                <Broom size={16} weight="bold" />
+                <span>Mulai scan</span>
+              </button>
+            }
+          />
+        </div>
+      ) : !hasRequestedScan && !isRefreshing ? (
+        <div className="mt-8">
+          <EmptyState
+            icon={<Broom size={28} weight="duotone" />}
+            title="Belum ada hasil scan"
+            description="Jalankan scan untuk melihat kandidat file besar dan usang."
+            action={
+              <button
+                type="button"
+                onClick={() => void handleScanRefresh()}
+                className="inline-flex items-center gap-2 rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-strong"
+              >
+                <Broom size={16} weight="bold" />
+                <span>Mulai scan</span>
+              </button>
+            }
+          />
+        </div>
       ) : (
         <>
-          {thresholds && (
+          {hasRequestedScan && thresholds && (
             <div className="mt-4">
               <ThresholdInfoBanner thresholds={thresholds} />
             </div>
           )}
 
+          {(hasRequestedScan || isRefreshing) && (
           <div className="mt-4">
             <LargeStaleToolbar
               typeFilter={typeFilter}
-              onTypeFilterChange={setTypeFilter}
+              onTypeFilterChange={handleTypeFilterChange}
               sortBy={sortBy}
-              onSortChange={setSortBy}
+              onSortChange={handleSortChange}
               isRefreshing={isRefreshing}
               onScanRefreshClick={() => void handleScanRefresh()}
               selectedCount={selectedCount}
@@ -233,9 +323,10 @@ export function LargeStalePage() {
               onDeleteClick={() => setIsDeleteModalOpen(true)}
             />
           </div>
+          )}
 
           <section className="mt-6 min-h-[320px]">
-            {isLoading ? (
+            {isLoading || isRefreshing ? (
               <LargeStaleTableSkeleton />
             ) : error ? (
               <div className="rounded-[--radius] border border-danger-strong/30 bg-danger-soft px-5 py-4 text-sm text-danger-strong">
@@ -258,7 +349,7 @@ export function LargeStalePage() {
                   action={
                     <button
                       type="button"
-                      onClick={() => setTypeFilter("all")}
+                      onClick={() => handleTypeFilterChange("all")}
                       className="inline-flex items-center gap-2 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft"
                     >
                       Tampilkan semua tipe
@@ -273,11 +364,40 @@ export function LargeStalePage() {
                 />
               )
             ) : (
-              <LargeStaleTable
-                files={effectiveFiles}
-                selectedFileIds={selectedFileIds}
-                onToggleSelection={toggleSelection}
-              />
+              <>
+                <div className="mb-3 text-xs text-muted">
+                  Menampilkan {currentPageStart}-{currentPageEnd} dari {total} file
+                </div>
+                <LargeStaleTable
+                  files={effectiveFiles}
+                  selectedFileIds={selectedFileIds}
+                  onToggleSelection={toggleSelection}
+                />
+                {total > LARGE_STALE_PAGE_LIMIT && (
+                  <div className="mt-4 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handlePageOffset(offset - LARGE_STALE_PAGE_LIMIT)
+                      }
+                      disabled={!hasPrevPage}
+                      className="inline-flex items-center gap-1.5 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Sebelumnya
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handlePageOffset(offset + LARGE_STALE_PAGE_LIMIT)
+                      }
+                      disabled={!hasNextPage}
+                      className="inline-flex items-center gap-1.5 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Berikutnya
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </>

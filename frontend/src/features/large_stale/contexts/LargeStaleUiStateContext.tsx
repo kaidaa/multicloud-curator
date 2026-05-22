@@ -18,9 +18,11 @@ interface LargeStaleUiStateValue {
   sortBy: LargeStaleSort
   setSortBy: (value: LargeStaleSort) => void
   selectedFileIds: ReadonlySet<string>
-  toggleSelection: (fileId: string) => void
+  hasRequestedScan: boolean
+  markScanRequested: () => void
+  toggleSelection: (id: string) => void
   clearSelection: () => void
-  removeFromSelection: (fileIds: string[]) => void
+  removeFromSelection: (ids: string[]) => void
 }
 
 const LargeStaleUiStateContext = createContext<LargeStaleUiStateValue | undefined>(
@@ -34,12 +36,17 @@ export function LargeStaleUiStateProvider({ children }: { children: ReactNode })
   const [typeFilter, setTypeFilter] = useState<LargeStaleTypeFilter>("all")
   const [sortBy, setSortBy] = useState<LargeStaleSort>("size_desc")
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
+  const [hasRequestedScan, setHasRequestedScan] = useState(false)
 
-  const toggleSelection = useCallback((fileId: string) => {
+  const markScanRequested = useCallback(() => {
+    setHasRequestedScan(true)
+  }, [])
+
+  const toggleSelection = useCallback((id: string) => {
     setSelectedFileIds((prev) => {
       const next = new Set(prev)
-      if (next.has(fileId)) next.delete(fileId)
-      else next.add(fileId)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }, [])
@@ -48,11 +55,11 @@ export function LargeStaleUiStateProvider({ children }: { children: ReactNode })
     setSelectedFileIds(new Set())
   }, [])
 
-  const removeFromSelection = useCallback((fileIds: string[]) => {
-    if (fileIds.length === 0) return
+  const removeFromSelection = useCallback((ids: string[]) => {
+    if (ids.length === 0) return
     setSelectedFileIds((prev) => {
       const next = new Set(prev)
-      for (const id of fileIds) next.delete(id)
+      for (const id of ids) next.delete(id)
       return next
     })
   }, [])
@@ -64,6 +71,8 @@ export function LargeStaleUiStateProvider({ children }: { children: ReactNode })
       sortBy,
       setSortBy,
       selectedFileIds,
+      hasRequestedScan,
+      markScanRequested,
       toggleSelection,
       clearSelection,
       removeFromSelection,
@@ -72,6 +81,8 @@ export function LargeStaleUiStateProvider({ children }: { children: ReactNode })
       typeFilter,
       sortBy,
       selectedFileIds,
+      hasRequestedScan,
+      markScanRequested,
       toggleSelection,
       clearSelection,
       removeFromSelection,

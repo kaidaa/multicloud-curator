@@ -10,7 +10,7 @@ import { formatRelativeTime } from "@/shared/utils/formatTime"
 interface LargeStaleRowProps {
   file: LargeStaleFile
   isSelected: boolean
-  onToggleSelection: (fileId: string) => void
+  onToggleSelection: (id: string) => void
 }
 
 function openInProvider(href: string | null) {
@@ -56,7 +56,7 @@ export function LargeStaleRow({
             type="checkbox"
             checked={isSelected}
             disabled={disabled}
-            onChange={() => onToggleSelection(file.fileId)}
+            onChange={() => onToggleSelection(file.id)}
             className="h-4 w-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={disabled ? reason : `Pilih ${file.name}`}
           />

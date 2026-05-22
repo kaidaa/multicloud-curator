@@ -1,11 +1,4 @@
-import { simulateDelay } from "@/shared/api/mocks/accounts"
-import {
-  applyMockLargeStaleBatchDelete,
-  applyMockLargeStaleRefresh,
-  getMockLargeStaleResponse,
-  type LargeStaleFileResponse,
-  type LargeStaleThresholds,
-} from "@/shared/api/mocks/largeStale"
+import { api } from "@/shared/api/client"
 
 export type LargeStaleTypeFilter =
   | "all"
@@ -25,14 +18,56 @@ export type Provider = "google" | "dropbox"
 
 export type TriggerReason = "large" | "stale" | "both"
 
+export interface LargeStaleThresholds {
+  large_percent_of_quota: number
+  stale_months: number
+}
+
+interface LargeStaleFileResponse {
+  id: string
+  file_id: string
+  name: string
+  type: string
+  mime_type: string | null
+  size_bytes: number | null
+  modified_at: string | null
+  modified_age_months: number
+  account_id: string
+  account_email: string
+  provider: Provider
+  is_owned: boolean
+  deletable: boolean
+  deletable_reason: string | null
+  trigger_reason: TriggerReason
+  path: string | null
+  web_view_link: string | null
+}
+
+interface BatchDeleteSuccessResponse {
+  id: string
+  success: true
+}
+
+interface BatchDeleteFailureResponse {
+  id: string
+  success: false
+  error_code: string
+  message: string
+}
+
+interface BatchDeleteResponse {
+  deleted: BatchDeleteSuccessResponse[]
+  failed: BatchDeleteFailureResponse[]
+}
+
 export interface LargeStaleFile {
   id: string
   fileId: string
   name: string
   type: string
-  mimeType: string
+  mimeType: string | null
   sizeBytes: number
-  modifiedAt: string
+  modifiedAt: string | null
   modifiedAgeMonths: number
   accountId: string
   accountEmail: string
@@ -53,7 +88,7 @@ export interface ListLargeStaleResult {
 }
 
 export interface BatchDeleteEntry {
-  fileId: string
+  id: string
   success: boolean
   errorCode?: string
   message?: string
@@ -71,7 +106,7 @@ function mapFile(raw: LargeStaleFileResponse): LargeStaleFile {
     name: raw.name,
     type: raw.type,
     mimeType: raw.mime_type,
-    sizeBytes: raw.size_bytes,
+    sizeBytes: raw.size_bytes ?? 0,
     modifiedAt: raw.modified_at,
     modifiedAgeMonths: raw.modified_age_months,
     accountId: raw.account_id,
@@ -86,35 +121,18 @@ function mapFile(raw: LargeStaleFileResponse): LargeStaleFile {
   }
 }
 
-// Duplikasi lokal logic categorize dari Feature 3/4 supaya boundary strict
-// no-touch terjaga. Saat Feature 6 selesai, evaluasi promote ke shared.
-function categorizeFileType(mimeType: string): LargeStaleTypeFilter {
-  const mime = mimeType.toLowerCase()
-  if (mime.startsWith("image/")) return "photo"
-  if (mime.startsWith("video/")) return "video"
-  if (mime.startsWith("audio/")) return "audio"
-  if (mime === "application/pdf") return "document"
-  if (mime.startsWith("application/vnd.openxmlformats-officedocument")) return "document"
-  if (mime.startsWith("application/vnd.google-apps")) return "document"
-  if (mime.startsWith("text/")) return "document"
-  return "other"
-}
-
-function compareFiles(
-  a: LargeStaleFile,
-  b: LargeStaleFile,
-  sort: LargeStaleSort,
-): number {
-  switch (sort) {
-    case "size_asc":
-      return a.sizeBytes - b.sizeBytes
-    case "modified_asc":
-      return new Date(a.modifiedAt).getTime() - new Date(b.modifiedAt).getTime()
-    case "modified_desc":
-      return new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime()
-    case "size_desc":
-    default:
-      return b.sizeBytes - a.sizeBytes
+function parseThresholds(value: unknown): LargeStaleThresholds {
+  if (!value || typeof value !== "object") {
+    return { large_percent_of_quota: 0.5, stale_months: 12 }
+  }
+  const raw = value as Partial<LargeStaleThresholds>
+  return {
+    large_percent_of_quota:
+      typeof raw.large_percent_of_quota === "number"
+        ? raw.large_percent_of_quota
+        : 0.5,
+    stale_months:
+      typeof raw.stale_months === "number" ? raw.stale_months : 12,
   }
 }
 
@@ -125,57 +143,41 @@ export interface ListLargeStaleParams {
   offset?: number
 }
 
-// M4: replace body dengan
-//   `api.get<LargeStaleFileResponse[]>('/files/large-stale', { params: { type, sort, limit, offset } })`.
-// Endpoint adalah on-demand query — tombol "Scan ulang" di UI call function
-// ini lagi (re-evaluate), bukan trigger async scan operation.
 export async function listLargeStaleFiles(
   params: ListLargeStaleParams = {},
 ): Promise<ListLargeStaleResult> {
   const { type = "all", sort = "size_desc", limit = 50, offset = 0 } = params
-  await simulateDelay(600)
-
-  const response = getMockLargeStaleResponse()
-  let files = response.data.map(mapFile)
-
-  if (type !== "all") {
-    files = files.filter((file) => categorizeFileType(file.mimeType) === type)
-  }
-
-  files.sort((a, b) => compareFiles(a, b, sort))
-
-  const total = files.length
-  const sliced = files.slice(offset, offset + limit)
+  const response = await api.get<LargeStaleFileResponse[]>("/files/large-stale", {
+    params: { type, sort, limit, offset },
+  })
+  const pagination = response.meta?.pagination
 
   return {
-    files: sliced,
-    total,
-    snapshotAt: response.meta.snapshot_at,
-    thresholds: response.meta.thresholds,
+    files: response.data.map(mapFile),
+    total:
+      typeof pagination?.total === "number"
+        ? pagination.total
+        : response.data.length,
+    snapshotAt:
+      typeof response.meta?.snapshot_at === "string"
+        ? response.meta.snapshot_at
+        : null,
+    thresholds: parseThresholds(response.meta?.thresholds),
   }
 }
 
-// Re-run on-demand query (UI label "Scan ulang"), bukan async scan job.
-// Mock cuma update timestamp supaya snapshot terbaru.
-export async function refreshLargeStale(): Promise<void> {
-  await simulateDelay(600)
-  applyMockLargeStaleRefresh()
-}
+export async function batchDeleteFiles(ids: string[]): Promise<BatchDeleteResult> {
+  const response = await api.post<BatchDeleteResponse>("/files/batch-delete", {
+    ids,
+  })
 
-// M4: replace dengan `api.delete('/files/batch', { file_ids })` — shared
-// endpoint dengan Feature 4.
-export async function batchDeleteFiles(fileIds: string[]): Promise<BatchDeleteResult> {
-  await simulateDelay(700)
-  const result = applyMockLargeStaleBatchDelete(fileIds)
   return {
-    deleted: result.deleted.map((entry) => ({
-      fileId: entry.file_id,
+    deleted: response.data.deleted.map((entry) => ({
+      id: entry.id,
       success: entry.success,
-      errorCode: entry.error_code,
-      message: entry.message,
     })),
-    failed: result.failed.map((entry) => ({
-      fileId: entry.file_id,
+    failed: response.data.failed.map((entry) => ({
+      id: entry.id,
       success: entry.success,
       errorCode: entry.error_code,
       message: entry.message,

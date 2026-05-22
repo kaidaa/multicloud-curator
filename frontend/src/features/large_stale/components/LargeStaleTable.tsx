@@ -5,7 +5,7 @@ import { Skeleton } from "@/shared/components/LoadingState"
 interface LargeStaleTableProps {
   files: LargeStaleFile[]
   selectedFileIds: ReadonlySet<string>
-  onToggleSelection: (fileId: string) => void
+  onToggleSelection: (id: string) => void
 }
 
 const TABLE_HEAD_CLASS =
@@ -43,7 +43,7 @@ export function LargeStaleTable({
               <LargeStaleRow
                 key={file.id}
                 file={file}
-                isSelected={selectedFileIds.has(file.fileId)}
+                isSelected={selectedFileIds.has(file.id)}
                 onToggleSelection={onToggleSelection}
               />
             ))}

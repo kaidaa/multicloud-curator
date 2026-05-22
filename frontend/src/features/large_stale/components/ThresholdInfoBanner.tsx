@@ -1,6 +1,6 @@
 import { Info } from "@phosphor-icons/react"
 
-import type { LargeStaleThresholds } from "@/shared/api/mocks/largeStale"
+import type { LargeStaleThresholds } from "@/features/large_stale/api"
 
 interface ThresholdInfoBannerProps {
   thresholds: LargeStaleThresholds

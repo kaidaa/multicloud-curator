@@ -1,20 +1,23 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import {
   batchDeleteFiles,
   listLargeStaleFiles,
-  refreshLargeStale,
   type BatchDeleteResult,
   type LargeStaleFile,
   type LargeStaleSort,
+  type LargeStaleThresholds,
   type LargeStaleTypeFilter,
 } from "@/features/large_stale/api"
-import type { LargeStaleThresholds } from "@/shared/api/mocks/largeStale"
 import { getErrorMessage } from "@/shared/api/errors"
+import { useAccountsContext } from "@/shared/contexts/AccountsContext"
 
 interface UseLargeStaleOptions {
   typeFilter: LargeStaleTypeFilter
   sortBy: LargeStaleSort
+  limit?: number
+  offset?: number
+  enabled?: boolean
 }
 
 interface UseLargeStaleResult {
@@ -26,7 +29,7 @@ interface UseLargeStaleResult {
   error: string | null
   refetch: () => Promise<void>
   refresh: () => Promise<void>
-  batchDelete: (fileIds: string[]) => Promise<BatchDeleteResult>
+  batchDelete: (ids: string[]) => Promise<BatchDeleteResult>
 }
 
 const INITIAL_THRESHOLDS: LargeStaleThresholds = {
@@ -37,7 +40,12 @@ const INITIAL_THRESHOLDS: LargeStaleThresholds = {
 export function useLargeStale({
   typeFilter,
   sortBy,
+  limit = 50,
+  offset = 0,
+  enabled = true,
 }: UseLargeStaleOptions): UseLargeStaleResult {
+  const { globalRefreshVersion } = useAccountsContext()
+  const lastManualFetchKeyRef = useRef<string | null>(null)
   const [files, setFiles] = useState<LargeStaleFile[]>([])
   const [total, setTotal] = useState(0)
   const [thresholds, setThresholds] = useState<LargeStaleThresholds | null>(null)
@@ -46,11 +54,16 @@ export function useLargeStale({
   const [error, setError] = useState<string | null>(null)
 
   const fetchFiles = useCallback(
-    async (type: LargeStaleTypeFilter, sort: LargeStaleSort) => {
+    async (type: LargeStaleTypeFilter, sort: LargeStaleSort, pageOffset: number) => {
       setIsLoading(true)
       setError(null)
       try {
-        const result = await listLargeStaleFiles({ type, sort })
+        const result = await listLargeStaleFiles({
+          type,
+          sort,
+          limit,
+          offset: pageOffset,
+        })
         setFiles(result.files)
         setTotal(result.total)
         setThresholds(result.thresholds)
@@ -61,14 +74,32 @@ export function useLargeStale({
         setIsLoading(false)
       }
     },
-    [],
+    [limit],
+  )
+
+  const requestKey = useMemo(
+    () => `${typeFilter}|${sortBy}|${limit}|${offset}|${globalRefreshVersion}`,
+    [typeFilter, sortBy, limit, offset, globalRefreshVersion],
   )
 
   useEffect(() => {
+    if (!enabled) {
+      setFiles([])
+      setTotal(0)
+      setThresholds(null)
+      setSnapshotAt(null)
+      setError(null)
+      setIsLoading(false)
+      return
+    }
+    if (lastManualFetchKeyRef.current === requestKey) {
+      lastManualFetchKeyRef.current = null
+      return
+    }
     let cancelled = false
     setIsLoading(true)
     setError(null)
-    listLargeStaleFiles({ type: typeFilter, sort: sortBy })
+    listLargeStaleFiles({ type: typeFilter, sort: sortBy, limit, offset })
       .then((result) => {
         if (cancelled) return
         setFiles(result.files)
@@ -87,26 +118,26 @@ export function useLargeStale({
     return () => {
       cancelled = true
     }
-  }, [typeFilter, sortBy])
+  }, [enabled, requestKey, typeFilter, sortBy, limit, offset])
 
   const refetch = useCallback(
-    () => fetchFiles(typeFilter, sortBy),
-    [fetchFiles, typeFilter, sortBy],
+    () => fetchFiles(typeFilter, sortBy, offset),
+    [fetchFiles, typeFilter, sortBy, offset],
   )
 
   // "Scan ulang" di UI: re-run on-demand query. Bukan async scan operation.
   const refresh = useCallback(async () => {
-    await refreshLargeStale()
-    await fetchFiles(typeFilter, sortBy)
-  }, [fetchFiles, typeFilter, sortBy])
+    await fetchFiles(typeFilter, sortBy, offset)
+    lastManualFetchKeyRef.current = requestKey
+  }, [fetchFiles, typeFilter, sortBy, offset, requestKey])
 
   const batchDelete = useCallback(
-    async (fileIds: string[]): Promise<BatchDeleteResult> => {
-      const result = await batchDeleteFiles(fileIds)
-      await fetchFiles(typeFilter, sortBy)
+    async (ids: string[]): Promise<BatchDeleteResult> => {
+      const result = await batchDeleteFiles(ids)
+      await fetchFiles(typeFilter, sortBy, offset)
       return result
     },
-    [fetchFiles, typeFilter, sortBy],
+    [fetchFiles, typeFilter, sortBy, offset],
   )
 
   return {
