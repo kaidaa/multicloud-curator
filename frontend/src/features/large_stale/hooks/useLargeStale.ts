@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import {
   batchDeleteFiles,
   listLargeStaleFiles,
+  scanLargeStaleFiles,
   type BatchDeleteResult,
   type LargeStaleFile,
   type LargeStaleSort,
   type LargeStaleThresholds,
   type LargeStaleTypeFilter,
+  type ListLargeStaleResult,
 } from "@/features/large_stale/api"
+import type { ScanCoverage } from "@/shared/api/coverage"
 import { getErrorMessage } from "@/shared/api/errors"
-import { useAccountsContext } from "@/shared/contexts/AccountsContext"
 
 interface UseLargeStaleOptions {
   typeFilter: LargeStaleTypeFilter
@@ -25,6 +27,7 @@ interface UseLargeStaleResult {
   total: number
   thresholds: LargeStaleThresholds | null
   snapshotAt: string | null
+  coverage: ScanCoverage | null
   isLoading: boolean
   error: string | null
   refetch: () => Promise<void>
@@ -44,14 +47,21 @@ export function useLargeStale({
   offset = 0,
   enabled = true,
 }: UseLargeStaleOptions): UseLargeStaleResult {
-  const { globalRefreshVersion } = useAccountsContext()
-  const lastManualFetchKeyRef = useRef<string | null>(null)
   const [files, setFiles] = useState<LargeStaleFile[]>([])
   const [total, setTotal] = useState(0)
   const [thresholds, setThresholds] = useState<LargeStaleThresholds | null>(null)
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null)
+  const [coverage, setCoverage] = useState<ScanCoverage | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const applyResult = useCallback((result: ListLargeStaleResult) => {
+    setFiles(result.files)
+    setTotal(result.total)
+    setThresholds(result.thresholds)
+    setSnapshotAt(result.snapshotAt)
+    setCoverage(result.coverage)
+  }, [])
 
   const fetchFiles = useCallback(
     async (type: LargeStaleTypeFilter, sort: LargeStaleSort, pageOffset: number) => {
@@ -64,22 +74,14 @@ export function useLargeStale({
           limit,
           offset: pageOffset,
         })
-        setFiles(result.files)
-        setTotal(result.total)
-        setThresholds(result.thresholds)
-        setSnapshotAt(result.snapshotAt)
+        applyResult(result)
       } catch (err) {
         setError(getErrorMessage(err))
       } finally {
         setIsLoading(false)
       }
     },
-    [limit],
-  )
-
-  const requestKey = useMemo(
-    () => `${typeFilter}|${sortBy}|${limit}|${offset}|${globalRefreshVersion}`,
-    [typeFilter, sortBy, limit, offset, globalRefreshVersion],
+    [applyResult, limit],
   )
 
   useEffect(() => {
@@ -88,12 +90,9 @@ export function useLargeStale({
       setTotal(0)
       setThresholds(null)
       setSnapshotAt(null)
+      setCoverage(null)
       setError(null)
       setIsLoading(false)
-      return
-    }
-    if (lastManualFetchKeyRef.current === requestKey) {
-      lastManualFetchKeyRef.current = null
       return
     }
     let cancelled = false
@@ -102,10 +101,7 @@ export function useLargeStale({
     listLargeStaleFiles({ type: typeFilter, sort: sortBy, limit, offset })
       .then((result) => {
         if (cancelled) return
-        setFiles(result.files)
-        setTotal(result.total)
-        setThresholds(result.thresholds)
-        setSnapshotAt(result.snapshotAt)
+        applyResult(result)
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -118,18 +114,18 @@ export function useLargeStale({
     return () => {
       cancelled = true
     }
-  }, [enabled, requestKey, typeFilter, sortBy, limit, offset])
+  }, [applyResult, enabled, typeFilter, sortBy, limit, offset])
 
   const refetch = useCallback(
     () => fetchFiles(typeFilter, sortBy, offset),
     [fetchFiles, typeFilter, sortBy, offset],
   )
 
-  // "Scan ulang" di UI: re-run on-demand query. Bukan async scan operation.
+  // "Scan ulang" menulis ulang hasil Large-Stale tersimpan, lalu membaca snapshot terbaru.
   const refresh = useCallback(async () => {
+    await scanLargeStaleFiles()
     await fetchFiles(typeFilter, sortBy, offset)
-    lastManualFetchKeyRef.current = requestKey
-  }, [fetchFiles, typeFilter, sortBy, offset, requestKey])
+  }, [fetchFiles, typeFilter, sortBy, offset])
 
   const batchDelete = useCallback(
     async (ids: string[]): Promise<BatchDeleteResult> => {
@@ -145,6 +141,7 @@ export function useLargeStale({
     total,
     thresholds: thresholds ?? INITIAL_THRESHOLDS,
     snapshotAt,
+    coverage,
     isLoading,
     error,
     refetch,

@@ -7,6 +7,7 @@ export type AccountStatus =
   | "syncing"
   | "token_invalid"
   | "revoked"
+  | "load_failed"
 
 export type Provider = "google" | "dropbox"
 
@@ -106,13 +107,26 @@ export async function refreshAccount(
   accountId: string,
   options: { signal?: AbortSignal } = {},
 ): Promise<AccountsListResult> {
+  const operation = await startRefreshAccount(accountId, options)
+  await waitForOperation(operation.operationId, { signal: options.signal })
+  return listAccounts({ signal: options.signal })
+}
+
+export async function startRefreshAccount(
+  accountId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<RefreshAllOperation> {
   const response = await api.post<RefreshOperationResponse>(
     `/accounts/${accountId}/refresh`,
     undefined,
     { signal: options.signal },
   )
-  await waitForOperation(response.data.operation_id, { signal: options.signal })
-  return listAccounts({ signal: options.signal })
+  return {
+    accountId: response.data.account_id,
+    operationId: response.data.operation_id,
+    operationType: response.data.operation_type,
+    status: response.data.status,
+  }
 }
 
 export async function refreshAllAccounts(
