@@ -11,6 +11,7 @@ import { EmptyState } from "@/shared/components/EmptyState"
 import { Skeleton } from "@/shared/components/LoadingState"
 import { getErrorMessage } from "@/shared/api/errors"
 import { useToast } from "@/shared/hooks/useToast"
+import { isAccountEffectivelyLoading } from "@/shared/utils/accountLifecycle"
 
 const TABLE_HEAD_CLASS =
   "px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted"
@@ -39,7 +40,7 @@ function AccountsTableHead() {
         <th className={`${TABLE_HEAD_CLASS} text-left`}>Email</th>
         <th className={`${TABLE_HEAD_CLASS} text-left`}>Status koneksi</th>
         <th className={`${TABLE_HEAD_CLASS} text-left`}>Kuota terpakai/total</th>
-        <th className={`${TABLE_HEAD_CLASS} text-left`}>Sinkronisasi terakhir</th>
+        <th className={`${TABLE_HEAD_CLASS} text-left`}>Pembaruan terakhir</th>
         <th className={`${TABLE_HEAD_CLASS} text-right`}>Aksi</th>
       </tr>
     </thead>
@@ -84,8 +85,8 @@ export function AccountsPage() {
     if (status === "connected") {
       pushToast(
         email
-          ? `Akun ${email} terhubung. Picu refresh untuk memuat metadata lengkap.`
-          : "Akun terhubung. Picu refresh untuk memuat metadata lengkap.",
+          ? `Akun ${email} terhubung. Data file sedang dimuat.`
+          : "Akun terhubung. Data file sedang dimuat.",
         "success",
       )
       void refetchAccounts()
@@ -112,7 +113,17 @@ export function AccountsPage() {
   async function handleRefresh(accountId: string) {
     try {
       await accountsApi.refreshAccount(accountId)
-      pushToast("Metadata akun berhasil dimuat.", "success")
+      pushToast("Data akun berhasil diperbarui.", "success")
+    } catch (err) {
+      if (isAbortError(err)) return
+      pushToast(getErrorMessage(err), "error")
+    }
+  }
+
+  async function handleRetryLoad(accountId: string) {
+    try {
+      await accountsApi.refreshAccount(accountId)
+      pushToast("Data akun berhasil dimuat.", "success")
     } catch (err) {
       if (isAbortError(err)) return
       pushToast(getErrorMessage(err), "error")
@@ -146,12 +157,12 @@ export function AccountsPage() {
         <p className="text-[11px] uppercase tracking-[0.18em] text-muted-2">Pengaturan</p>
         <h1 className="mt-2 text-2xl font-semibold text-ink">Akun Terhubung</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          Kelola akun cloud storage yang dipakai sistem untuk membaca metadata. File asli tetap berada di penyedia masing-masing.
+          Kelola akun cloud storage yang dipakai sistem untuk membaca informasi file. File asli tetap berada di penyedia masing-masing.
         </p>
       </header>
 
       {problemAccounts.length > 0 && !accountsApi.isLoading && (
-        <div className="mt-6 flex items-start gap-3 rounded-[--radius-sm] border border-warning-strong/20 bg-warning-soft px-4 py-3 text-sm text-warning-strong">
+        <div className="mt-6 flex items-start gap-3 rounded-[--radius-sm] border border-warning-strong/40 bg-warning-soft/80 px-4 py-3 text-sm text-warning-strong">
           <WarningCircle size={18} weight="fill" className="mt-0.5 flex-shrink-0" />
           <p>
             {problemAccounts.length} akun perlu otorisasi ulang:{" "}
@@ -209,7 +220,7 @@ export function AccountsPage() {
             <EmptyState
               icon={<Plugs size={28} weight="duotone" />}
               title="Belum ada akun terhubung"
-              description="Tambahkan akun untuk memulai agregasi metadata. File tetap berada di penyedia asli."
+              description="Tambahkan akun untuk mulai menggabungkan informasi file. File tetap berada di penyedia asli."
               action={
                 <button
                   type="button"
@@ -244,7 +255,12 @@ export function AccountsPage() {
                       <AccountRow
                         key={account.id}
                         account={account}
+                        isLoading={isAccountEffectivelyLoading(
+                          account,
+                          accountsApi.loadingAccountIds,
+                        )}
                         onRefresh={handleRefresh}
+                        onRetryLoad={handleRetryLoad}
                         onReauthorize={handleReauthorize}
                         onDisconnect={(accountId) => {
                           const target = accountsApi.accounts.find((a) => a.id === accountId)

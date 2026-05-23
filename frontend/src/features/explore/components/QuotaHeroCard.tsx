@@ -17,13 +17,12 @@ export function QuotaHeroCard({
   quotaSummary,
   problemAccounts,
 }: QuotaHeroCardProps) {
-  const syncedAccounts = accounts.filter((a) => a.status !== "never_synced")
   const totalUsed =
     quotaSummary?.totalUsedBytes ??
-    syncedAccounts.reduce((sum, a) => sum + a.quotaUsedBytes, 0)
+    accounts.reduce((sum, a) => sum + a.quotaUsedBytes, 0)
   const totalCapacity =
     quotaSummary?.totalCapacityBytes ??
-    syncedAccounts.reduce((sum, a) => sum + a.quotaTotalBytes, 0)
+    accounts.reduce((sum, a) => sum + a.quotaTotalBytes, 0)
   const percent =
     totalCapacity > 0 ? Math.min(Math.round((totalUsed / totalCapacity) * 100), 100) : 0
 
@@ -40,7 +39,8 @@ export function QuotaHeroCard({
         </h2>
       </header>
 
-      <div className="border-b border-line px-5 py-4">
+      <div className="grid flex-1 grid-rows-2">
+      <div className="flex flex-col justify-center border-b border-line px-5 py-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-2">
           Total terpakai
         </p>
@@ -62,7 +62,7 @@ export function QuotaHeroCard({
         </div>
       </div>
 
-      <div className="flex-1 px-5 py-4">
+      <div className="flex flex-col justify-center px-5 py-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-2">
           Akun aktif
         </p>
@@ -81,6 +81,7 @@ export function QuotaHeroCard({
         ) : (
           <p className="mt-3 text-xs text-muted">Semua akun sehat.</p>
         )}
+      </div>
       </div>
     </section>
   )

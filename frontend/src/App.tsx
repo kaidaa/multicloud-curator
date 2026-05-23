@@ -8,6 +8,7 @@ import { LargeStalePage } from "@/features/large_stale/pages/LargeStalePage"
 import { SearchFullView } from "@/features/search/pages/SearchFullView"
 import { SecurityPage } from "@/features/security/pages/SecurityPage"
 import { AppLayout } from "@/layouts/AppLayout"
+import { AnalyticsRouteGuard } from "@/shared/components/AnalyticsRouteGuard"
 
 export function App() {
   return (
@@ -17,9 +18,30 @@ export function App() {
           <Route index element={<Navigate to="/eksplorasi" replace />} />
           <Route path="eksplorasi" element={<ExplorePage />} />
           <Route path="cari" element={<SearchFullView />} />
-          <Route path="duplikasi" element={<DuplicatesPage />} />
-          <Route path="file-besar-usang" element={<LargeStalePage />} />
-          <Route path="keamanan" element={<SecurityPage />} />
+          <Route
+            path="duplikasi"
+            element={
+              <AnalyticsRouteGuard>
+                <DuplicatesPage />
+              </AnalyticsRouteGuard>
+            }
+          />
+          <Route
+            path="file-besar-usang"
+            element={
+              <AnalyticsRouteGuard>
+                <LargeStalePage />
+              </AnalyticsRouteGuard>
+            }
+          />
+          <Route
+            path="keamanan"
+            element={
+              <AnalyticsRouteGuard>
+                <SecurityPage />
+              </AnalyticsRouteGuard>
+            }
+          />
           <Route path="pengaturan/akun" element={<AccountsPage />} />
           <Route path="pengaturan/keyword" element={<KeywordsPage />} />
           <Route path="*" element={<Navigate to="/eksplorasi" replace />} />

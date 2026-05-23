@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { ArrowsClockwise, Plugs, WarningCircle } from "@phosphor-icons/react"
+import { Plugs, WarningCircle } from "@phosphor-icons/react"
 import { useNavigate } from "react-router-dom"
 
 import { useAccounts } from "@/features/accounts/hooks/useAccounts"
@@ -11,47 +11,35 @@ import { useActivity } from "@/features/explore/hooks/useActivity"
 import { useQuotaSummary } from "@/features/explore/hooks/useQuotaSummary"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { Skeleton } from "@/shared/components/LoadingState"
-import { useToast } from "@/shared/hooks/useToast"
+import { getAccountLifecycleSummary } from "@/shared/utils/accountLifecycle"
 import { formatDateID } from "@/shared/utils/formatDate"
 
 export function ExplorePage() {
   const accountsApi = useAccounts()
-  const { pushToast } = useToast()
   const navigate = useNavigate()
 
   const activity = useActivity({ limit: 10 })
   const quota = useQuotaSummary()
 
-  const problemAccounts = useMemo(
+  const { failedLoadAccounts, problemAccounts } = useMemo(
     () =>
-      accountsApi.accounts.filter(
-        (a) => a.status === "token_invalid" || a.status === "revoked",
-      ),
-    [accountsApi.accounts],
+      getAccountLifecycleSummary(accountsApi.accounts, {
+        loadingAccountIds: accountsApi.loadingAccountIds,
+      }),
+    [accountsApi.accounts, accountsApi.loadingAccountIds],
   )
-
-  const pendingAccounts = useMemo(
-    () => accountsApi.accounts.filter((a) => a.status === "never_synced"),
-    [accountsApi.accounts],
+  const attentionAccounts = useMemo(
+    () => [...problemAccounts, ...failedLoadAccounts],
+    [failedLoadAccounts, problemAccounts],
   )
-
-  async function handleRefreshPending() {
-    if (pendingAccounts.length === 0) return
-    try {
-      await Promise.all(
-        pendingAccounts.map((a) => accountsApi.refreshAccount(a.id)),
-      )
-      activity.refetch()
-      quota.refetch()
-      pushToast("Metadata akun berhasil dimuat.", "success")
-    } catch {
-      pushToast("Sebagian akun gagal dimuat. Periksa halaman Akun Terhubung.", "error")
-    }
-  }
 
   const isInitialAccountsLoading = accountsApi.isLoading
   const snapshotAt =
     activity.snapshotAt ?? quota.snapshotAt ?? accountsApi.snapshotAt
+  const overviewLayoutClass =
+    accountsApi.accounts.length >= 3
+      ? "lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] lg:items-stretch"
+      : "grid-cols-1"
 
   if (isInitialAccountsLoading) {
     return (
@@ -74,7 +62,7 @@ export function ExplorePage() {
           <EmptyState
             icon={<Plugs size={28} weight="duotone" />}
             title="Hubungkan akun cloud pertama"
-            description="Belum ada akun terhubung. Hubungkan akun untuk mulai mengagregasi metadata dari Google Drive dan Dropbox."
+            description="Belum ada akun terhubung. Hubungkan akun untuk mulai menggabungkan informasi file dari Google Drive dan Dropbox."
             action={
               <button
                 type="button"
@@ -107,25 +95,9 @@ export function ExplorePage() {
       )}
 
       {quota.error && (
-        <div className="mt-4 rounded-[--radius] border border-warning-strong/20 bg-warning-soft px-5 py-4 text-sm text-warning-strong">
+        <div className="mt-4 rounded-[--radius] border border-warning-strong/40 bg-warning-soft/80 px-5 py-4 text-sm text-warning-strong">
           <p className="font-medium">Ringkasan kuota belum bisa dimuat.</p>
           <p className="mt-1 text-xs">{quota.error}</p>
-        </div>
-      )}
-
-      {pendingAccounts.length > 0 && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[--radius-sm] border border-warning-strong/20 bg-warning-soft px-4 py-3 text-sm text-warning-strong">
-          <p>
-            <strong className="font-semibold">{pendingAccounts.length}</strong> akun menunggu sinkronisasi. Data akun tersebut akan muncul di dashboard setelah refresh berhasil.
-          </p>
-          <button
-            type="button"
-            onClick={() => void handleRefreshPending()}
-            className="inline-flex items-center gap-2 rounded-[--radius-sm] border border-warning-strong/40 bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning-strong transition hover:bg-warning/20"
-          >
-            <ArrowsClockwise size={14} weight="bold" />
-            <span>Refresh akun</span>
-          </button>
         </div>
       )}
 
@@ -133,19 +105,20 @@ export function ExplorePage() {
         <div className="mt-4 flex items-start gap-3 rounded-[--radius-sm] border border-danger-strong/20 bg-danger-soft px-4 py-3 text-sm text-danger-strong">
           <WarningCircle size={18} weight="fill" className="mt-0.5 flex-shrink-0" />
           <p>
-            <strong className="font-semibold">{problemAccounts.length}</strong> akun perlu otorisasi ulang. Angka kuota mencerminkan sinkronisasi terakhir.
+            <strong className="font-semibold">{problemAccounts.length}</strong> akun perlu otorisasi ulang. Angka kuota memakai data terakhir yang berhasil dibaca.
           </p>
         </div>
       )}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(280px,360px)_1fr] lg:items-stretch">
+      <div className={`mt-6 grid gap-4 ${overviewLayoutClass}`}>
         <QuotaHeroCard
           accounts={accountsApi.accounts}
-          problemAccounts={problemAccounts}
+          problemAccounts={attentionAccounts}
           quotaSummary={quota.summary}
         />
         <BreakdownGrid
           accounts={accountsApi.accounts}
+          loadingAccountIds={accountsApi.loadingAccountIds}
           quotaSummary={quota.summary}
         />
       </div>
@@ -184,7 +157,7 @@ function ExploreHeader({ snapshotAt }: { snapshotAt: string | null }) {
       </p>
       {snapshotAt && (
         <p className="mt-2 text-xs text-muted-2">
-          Snapshot terakhir: {formatDateID(snapshotAt)}
+          Data terakhir dibaca: {formatDateID(snapshotAt)}
         </p>
       )}
     </header>

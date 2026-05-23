@@ -6,6 +6,7 @@ import {
   CircleNotch,
   CopySimple,
   Funnel,
+  Info,
   MagnifyingGlass,
   WarningCircle,
 } from "@phosphor-icons/react"
@@ -21,7 +22,12 @@ import { useDuplicates } from "@/features/duplicates/hooks/useDuplicates"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { Skeleton } from "@/shared/components/LoadingState"
 import { useToast } from "@/shared/hooks/useToast"
+import { getAccountLifecycleSummary } from "@/shared/utils/accountLifecycle"
 import { formatDateID } from "@/shared/utils/formatDate"
+import {
+  hasNewActiveAccountsOutsideCoverage,
+  shouldShowCoverageRatio,
+} from "@/shared/utils/scanCoverage"
 
 const DUPLICATES_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 const DEFAULT_DUPLICATES_PAGE_SIZE = 10
@@ -37,19 +43,26 @@ export function DuplicatesPage() {
     openGroupIds,
     toggleOpenGroup,
     resetOpenGroups,
+    markScanRequested,
   } = useDuplicatesUiState()
 
   const [offset, setOffset] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_DUPLICATES_PAGE_SIZE)
 
-  const { groups, total, scanAt, isLoading, error, refetch, scan, batchDelete } =
+  const { accounts } = useAccounts()
+  const { hasActiveAccounts, problemAccounts } = useMemo(
+    () => getAccountLifecycleSummary(accounts),
+    [accounts],
+  )
+
+  const { groups, total, scanAt, coverage, isLoading, error, refetch, scan, batchDelete } =
     useDuplicates({
       typeFilter,
       limit: pageSize,
       offset,
+      enabled: hasActiveAccounts,
     })
 
-  const { accounts } = useAccounts()
   const { pushToast } = useToast()
 
   const [isScanning, setIsScanning] = useState(false)
@@ -64,13 +77,10 @@ export function DuplicatesPage() {
     setOffset(lastValidOffset)
   }, [isLoading, offset, pageSize, total])
 
-  const problemAccounts = useMemo(
-    () =>
-      accounts.filter(
-        (a) => a.status === "token_invalid" || a.status === "revoked",
-      ),
-    [accounts],
-  )
+  useEffect(() => {
+    if (hasActiveAccounts) return
+    clearSelection()
+  }, [clearSelection, hasActiveAccounts])
 
   // Status akun bersifat dinamis (user bisa reauthorize kapan saja),
   // sedangkan field `deletable`/`deletableReason` di mock adalah snapshot
@@ -159,14 +169,17 @@ export function DuplicatesPage() {
   }
 
   async function handleScanClick() {
-    if (isScanning) return
+    if (isScanning || !hasActiveAccounts) return
     setIsScanning(true)
     try {
-      await scan()
+      const result = await scan()
+      markScanRequested()
       setOffset(0)
       clearSelection()
       resetOpenGroups()
-      pushToast(`Scan selesai. ${total} grup ditemukan.`, "info")
+      if (result && result.total > 0) {
+        pushToast(`Scan selesai. ${result.total} grup ditemukan.`, "info")
+      }
     } catch (err) {
       pushToast(
         err instanceof Error ? err.message : "Scan gagal. Coba lagi.",
@@ -204,8 +217,10 @@ export function DuplicatesPage() {
     }
   }
 
-  const hasData = effectiveGroups.length > 0
-  const hasEverScanned = scanAt !== null
+  const hasStoredScan = scanAt !== null
+  const hasData = hasStoredScan && effectiveGroups.length > 0
+  const showCoverageRatio = shouldShowCoverageRatio(coverage)
+  const hasCoverageNudge = hasNewActiveAccountsOutsideCoverage(coverage, accounts)
 
   return (
     <>
@@ -215,18 +230,30 @@ export function DuplicatesPage() {
         <p className="mt-2 max-w-2xl text-sm text-muted">
           Tinjau kelompok file yang dianggap duplikat. File shared hanya ditampilkan sebagai konteks dan tidak dapat dihapus.
         </p>
-        {hasEverScanned && (
+        {hasActiveAccounts && hasStoredScan && (
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-2">
             <span>
               Scan terakhir: <strong className="font-semibold text-ink-soft">{formatDateID(scanAt)}</strong>
             </span>
+            {showCoverageRatio && coverage && (
+              <>
+                <span>|</span>
+                <span>
+                  Hasil scan ini mencakup{" "}
+                  <strong className="font-semibold text-ink-soft">{coverage.coveredAccountCount}</strong>
+                  {" "}dari{" "}
+                  <strong className="font-semibold text-ink-soft">{coverage.eligibleAccountCount}</strong>
+                  {" "}akun
+                </span>
+              </>
+            )}
             {hasData && (
               <>
-                <span>·</span>
+                <span>|</span>
                 <span>
                   <strong className="font-semibold text-ink-soft">{total}</strong> grup
                 </span>
-                <span>·</span>
+                <span>|</span>
                 <span>
                   <strong className="font-semibold text-ink-soft">{totalFiles}</strong> file di halaman ini
                 </span>
@@ -237,7 +264,7 @@ export function DuplicatesPage() {
       </header>
 
       {problemAccounts.length > 0 && (
-        <div className="mt-6 flex items-start gap-3 rounded-[--radius-sm] border border-warning-strong/20 bg-warning-soft px-4 py-3 text-sm text-warning-strong">
+        <div className="mt-6 flex items-start gap-3 rounded-[--radius-sm] border border-warning-strong/40 bg-warning-soft/80 px-4 py-3 text-sm text-warning-strong">
           <WarningCircle size={18} weight="fill" className="mt-0.5 flex-shrink-0" />
           <p>
             <strong className="font-semibold">{problemAccounts.length}</strong> akun perlu otorisasi ulang. Beberapa file dari akun tersebut tidak bisa dihapus sampai otorisasi diperbarui.
@@ -245,12 +272,45 @@ export function DuplicatesPage() {
         </div>
       )}
 
-      {(hasData || isLoading || isScanning) && (
+      {hasActiveAccounts && hasStoredScan && hasCoverageNudge && (
+        <div className="mt-4 flex items-center gap-2 text-xs text-primary-strong">
+          <span
+            title="Ada akun aktif yang belum tercakup oleh hasil scan terakhir. Jalankan scan ulang untuk memperbarui hasil."
+            aria-label="Ada akun aktif yang belum tercakup oleh hasil scan terakhir. Jalankan scan ulang untuk memperbarui hasil."
+          >
+            <Info size={15} weight="bold" aria-hidden="true" />
+          </span>
+          <span>Belum mencakup akun terbaru</span>
+        </div>
+      )}
+
+      {!hasActiveAccounts ? (
+        <section className="mt-8">
+          <EmptyState
+            icon={<MagnifyingGlass size={28} weight="duotone" />}
+            title="Belum ada akun dengan data lengkap"
+            description="Scan duplikasi tersedia setelah minimal satu akun selesai dimuat."
+            action={
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-2 rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-medium text-white opacity-50 disabled:cursor-not-allowed"
+              >
+                <MagnifyingGlass size={16} weight="bold" />
+                <span>Mulai scan</span>
+              </button>
+            }
+          />
+        </section>
+      ) : (
+        <>
+      {(hasStoredScan || isLoading || isScanning) && (
         <div className="mt-6">
           <DuplicatesToolbar
             typeFilter={typeFilter}
             onTypeFilterChange={handleTypeFilterChange}
             isScanning={isScanning}
+            scanLabel={hasStoredScan ? "Scan ulang" : "Mulai scan"}
             onScanClick={() => void handleScanClick()}
             selectedCount={selectedCount}
             selectedTotalSize={selectedTotalSize}
@@ -287,7 +347,7 @@ export function DuplicatesPage() {
             </button>
           </div>
         ) : effectiveGroups.length === 0 ? (
-          hasEverScanned ? (
+          hasStoredScan ? (
             // Empty post-scan. Bedakan: kalau filter aktif (bukan "all") berarti
             // tidak ada match untuk filter ini; selain itu memang scan tidak
             // menemukan duplikat sama sekali.
@@ -316,9 +376,9 @@ export function DuplicatesPage() {
                     type="button"
                     onClick={() => void handleScanClick()}
                     disabled={isScanning}
-                    className="inline-flex items-center gap-2 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-[--radius-sm] bg-primary px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <ArrowsClockwise size={14} weight="bold" />
+                    <ArrowsClockwise size={15} weight="bold" />
                     <span>Scan ulang</span>
                   </button>
                 }
@@ -350,7 +410,7 @@ export function DuplicatesPage() {
                 onChange={(event) =>
                   handlePageSizeChange(Number(event.target.value))
                 }
-                className="rounded-[--radius-sm] border border-line bg-panel px-2 py-1 text-xs text-ink-soft transition hover:border-line-strong focus:border-line-strong focus:outline-none"
+                className="rounded-[--radius-sm] border border-line bg-bg px-2 py-1 text-xs text-ink-soft transition hover:border-line-strong focus:border-line-strong focus:outline-none"
                 aria-label="Jumlah grup per halaman"
               >
                 {DUPLICATES_PAGE_SIZE_OPTIONS.map((option) => (
@@ -404,6 +464,8 @@ export function DuplicatesPage() {
           </>
         )}
       </section>
+        </>
+      )}
 
       <BatchDeleteConfirmModal
         open={isDeleteModalOpen}

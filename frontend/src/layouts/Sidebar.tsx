@@ -6,12 +6,16 @@ import {
   CopySimple,
   Gauge,
   Hash,
+  LockKey,
   PlugsConnected,
   ShieldCheck,
   type Icon,
 } from "@phosphor-icons/react"
 
 import { useAccountsContext } from "@/shared/contexts/AccountsContext"
+import { getErrorMessage } from "@/shared/api/errors"
+import { useToast } from "@/shared/hooks/useToast"
+import { getAccountLifecycleSummary } from "@/shared/utils/accountLifecycle"
 import { formatDateID } from "@/shared/utils/formatDate"
 
 interface NavItem {
@@ -19,6 +23,7 @@ interface NavItem {
   to: string
   icon: Icon
   enabled: boolean
+  requiresAccount?: boolean
 }
 
 interface NavGroup {
@@ -37,9 +42,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     heading: "KELOLA FILE",
     items: [
-      { label: "Duplikasi", to: "/duplikasi", icon: CopySimple, enabled: true },
-      { label: "File Besar dan Usang", to: "/file-besar-usang", icon: Broom, enabled: true },
-      { label: "Keamanan File", to: "/keamanan", icon: ShieldCheck, enabled: true },
+      { label: "Duplikasi", to: "/duplikasi", icon: CopySimple, enabled: true, requiresAccount: true },
+      { label: "File Besar dan Usang", to: "/file-besar-usang", icon: Broom, enabled: true, requiresAccount: true },
+      { label: "Keamanan File", to: "/keamanan", icon: ShieldCheck, enabled: true, requiresAccount: true },
     ],
   },
   {
@@ -52,9 +57,48 @@ const NAV_GROUPS: NavGroup[] = [
 ]
 
 const DISABLED_TOOLTIP = "Tersedia di milestone berikutnya"
+const ACCOUNT_REQUIRED_TOOLTIP = "Hubungkan akun untuk membuka menu ini"
 
 export function Sidebar() {
-  const { snapshotAt } = useAccountsContext()
+  const {
+    accounts,
+    isRefreshingAll,
+    refreshAllAccounts,
+    snapshotAt,
+  } = useAccountsContext()
+  const { pushToast } = useToast()
+  const { hasAccounts } = getAccountLifecycleSummary(accounts)
+
+  const canRefreshAll = accounts.length > 0 && !isRefreshingAll
+
+  async function handleRefreshAll() {
+    if (!canRefreshAll) return
+    try {
+      const summary = await refreshAllAccounts()
+      if (summary.total === 0) {
+        pushToast("Tidak ada akun yang perlu diperbarui.", "info")
+        return
+      }
+
+      if (summary.failed.length > 0) {
+        const firstMessages = summary.failed
+          .map((failure) => failure.message)
+          .filter(Boolean)
+          .slice(0, 2)
+          .join("; ")
+        pushToast(
+          `Pembaruan selesai: ${summary.completed} akun berhasil, ${summary.failed.length} gagal.${firstMessages ? ` ${firstMessages}` : ""}`,
+          "error",
+        )
+        return
+      }
+
+      pushToast(`Pembaruan selesai: ${summary.completed} akun berhasil.`, "success")
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return
+      pushToast(getErrorMessage(err), "error")
+    }
+  }
 
   return (
     <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-line bg-sidebar">
@@ -75,9 +119,16 @@ export function Sidebar() {
               {group.heading}
             </p>
             <ul className="space-y-1">
-              {group.items.map((item) => (
+              {group.items.map((item) => {
+                const itemEnabled =
+                  item.enabled && (!item.requiresAccount || hasAccounts)
+                const tooltip = item.requiresAccount && !hasAccounts
+                  ? ACCOUNT_REQUIRED_TOOLTIP
+                  : DISABLED_TOOLTIP
+
+                return (
                 <li key={item.to}>
-                  {item.enabled ? (
+                  {itemEnabled ? (
                     <NavLink
                       to={item.to}
                       className={({ isActive }) =>
@@ -95,33 +146,46 @@ export function Sidebar() {
                     <button
                       type="button"
                       disabled
-                      title={DISABLED_TOOLTIP}
+                      title={tooltip}
                       className="flex w-full cursor-not-allowed items-center gap-3 rounded-[--radius-sm] px-3 py-2 text-sm text-muted-2 opacity-60"
                     >
                       <item.icon size={18} weight="regular" />
                       <span>{item.label}</span>
+                      {item.requiresAccount && !hasAccounts && (
+                        <LockKey size={13} weight="bold" className="ml-auto" />
+                      )}
                     </button>
                   )}
                 </li>
-              ))}
+                )
+              })}
             </ul>
           </div>
         ))}
       </nav>
 
       <div className="border-t border-line px-5 py-4">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-2">Snapshot</p>
+        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-2">Terakhir Diperbarui</p>
         <p className="mt-1 text-xs text-muted">
           {snapshotAt ? formatDateID(snapshotAt) : "—"}
         </p>
         <button
           type="button"
-          disabled
-          title={DISABLED_TOOLTIP}
-          className="mt-3 flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-[--radius-sm] border border-line bg-panel px-3 py-2 text-xs text-muted-2 opacity-60"
+          disabled={!canRefreshAll}
+          title={
+            accounts.length === 0
+              ? "Hubungkan akun terlebih dahulu"
+              : "Perbarui daftar file semua akun"
+          }
+          onClick={() => void handleRefreshAll()}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-[--radius-sm] bg-primary px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <ArrowsClockwise size={14} weight="bold" />
-          <span>Refresh semua akun</span>
+          <ArrowsClockwise
+            size={15}
+            weight="bold"
+            className={isRefreshingAll ? "animate-spin" : undefined}
+          />
+          <span>{isRefreshingAll ? "Memperbarui..." : "Perbarui semua akun"}</span>
         </button>
       </div>
     </aside>

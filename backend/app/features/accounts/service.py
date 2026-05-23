@@ -24,9 +24,12 @@ from app.features.accounts.schemas import (
     RefreshOperationResponse,
 )
 from app.features.async_operations import repository as ops_repo
+from app.features.duplicates import repository as duplicates_repo
+from app.features.scan_metadata import repository as scan_metadata_repo
 from app.shared.encryption import decrypt_token
 from app.shared.exceptions import (
     AdapterError,
+    OperationInProgressError,
     ScopeInsufficientError,
     TokenInvalidError,
     ValidationError,
@@ -66,6 +69,21 @@ def _fallback_previous_status(account: Account) -> str:
     return "active" if account.last_good_sync_at else "never_synced"
 
 
+def _is_initial_load_context(
+    context: dict,
+    *,
+    account: Account,
+    previous_data_state: str | None,
+) -> bool:
+    triggered_by = context.get("triggered_by")
+    if triggered_by == "initial_load":
+        return True
+    if triggered_by in {"single_refresh", "refresh_all"}:
+        return False
+
+    return account.last_good_sync_at is None and previous_data_state != "Lengkap"
+
+
 def to_account_response(account: Account) -> AccountResponse:
     return AccountResponse(
         id=account.id,
@@ -82,6 +100,10 @@ def to_account_response(account: Account) -> AccountResponse:
 
 def list_accounts(db: Session) -> list[AccountResponse]:
     return [to_account_response(account) for account in accounts_repo.list_accounts(db)]
+
+
+def latest_account_data_at(db: Session) -> str | None:
+    return _iso(accounts_repo.latest_successful_sync_at(db))
 
 
 def initiate_connect(
@@ -119,6 +141,45 @@ def initiate_reauthorize(
     return OAuthInitiateResponse(authorization_url=authorization_url, state=raw_state)
 
 
+def _queue_initial_load(
+    db: Session,
+    *,
+    account: Account,
+    background_tasks: BackgroundTasks | None,
+) -> None:
+    if background_tasks is None or account.data_state == "Lengkap":
+        return
+
+    previous_status = _fallback_previous_status(account)
+    try:
+        operation = ops_repo.create_operation(
+            db,
+            operation_type="refresh",
+            context={
+                "account_id": account.id,
+                "provider": account.provider,
+                "previous_status": previous_status,
+                "previous_data_state": account.data_state,
+                "triggered_by": "initial_load",
+            },
+            enforce_global_limit=False,
+        )
+    except OperationInProgressError:
+        logger.info(
+            "Initial load skipped because refresh is already running | account_id=%s",
+            account.id,
+        )
+        return
+
+    accounts_repo.set_account_status(
+        db,
+        account,
+        status="syncing",
+        last_sync_at=accounts_repo.utc_now(),
+    )
+    background_tasks.add_task(execute_refresh_operation, operation.id, account.id)
+
+
 def handle_oauth_callback(
     db: Session,
     *,
@@ -126,6 +187,7 @@ def handle_oauth_callback(
     state: str | None,
     provider_error: str | None = None,
     settings: Settings | None = None,
+    background_tasks: BackgroundTasks | None = None,
 ) -> str:
     app_settings = settings or get_settings()
     if provider_error:
@@ -191,7 +253,11 @@ def handle_oauth_callback(
             scopes=token_bundle.scopes,
         )
         recent_files = get_adapter(account.provider, account_credentials, app_settings).fetch_recent(limit=10)
-        accounts_repo.replace_files_if_partial(db, account=account, files=recent_files)
+        deleted_files = accounts_repo.replace_files_if_partial(db, account=account, files=recent_files)
+        if deleted_files:
+            duplicates_repo.cleanup_duplicate_groups(db)
+        if state_context.mode == "connect":
+            _queue_initial_load(db, account=account, background_tasks=background_tasks)
         redirect_url = _frontend_redirect(
             app_settings,
             {
@@ -291,6 +357,7 @@ def trigger_refresh(
             operation="refresh",
         )
     previous_status = _fallback_previous_status(account)
+    triggered_by = "initial_load" if account.status == "load_failed" else "single_refresh"
     operation = ops_repo.create_operation(
         db,
         operation_type="refresh",
@@ -299,7 +366,7 @@ def trigger_refresh(
             "provider": account.provider,
             "previous_status": previous_status,
             "previous_data_state": account.data_state,
-            "triggered_by": "single_refresh",
+            "triggered_by": triggered_by,
         },
     )
     background_tasks.add_task(execute_refresh_operation, operation.id, account.id)
@@ -330,6 +397,7 @@ def trigger_refresh_all(
                     "previous_data_state": account.data_state,
                     "triggered_by": "refresh_all",
                 },
+                enforce_global_limit=False,
             )
         except Exception as exc:
             logger.info(
@@ -353,6 +421,10 @@ def trigger_refresh_all(
 def disconnect_account(db: Session, account_id: str) -> None:
     account = accounts_repo.get_account(db, account_id)
     accounts_repo.delete_account_cascade(db, account)
+    duplicates_repo.cleanup_duplicate_groups(db)
+    if not accounts_repo.list_accounts(db):
+        scan_metadata_repo.delete_all_scan_metadata(db)
+        db.commit()
 
 
 def execute_refresh_operation(operation_id: str, account_id: str) -> None:
@@ -364,6 +436,11 @@ def execute_refresh_operation(operation_id: str, account_id: str) -> None:
         account = accounts_repo.get_account(db, account_id)
         previous_status = context.get("previous_status") or _fallback_previous_status(account)
         previous_data_state = context.get("previous_data_state") or account.data_state
+        is_initial_load = _is_initial_load_context(
+            context,
+            account=account,
+            previous_data_state=previous_data_state,
+        )
 
         ops_repo.mark_running(db, operation, label="Mengambil metadata")
         now = accounts_repo.utc_now()
@@ -381,7 +458,9 @@ def execute_refresh_operation(operation_id: str, account_id: str) -> None:
                 total=len(files),
                 label="Menyimpan metadata",
             )
-            accounts_repo.replace_files_for_account(db, account_id=account.id, files=files)
+            deleted_files = accounts_repo.replace_files_for_account(db, account_id=account.id, files=files)
+            if deleted_files:
+                duplicates_repo.cleanup_duplicate_groups(db)
             accounts_repo.set_account_status(
                 db,
                 account,
@@ -393,7 +472,12 @@ def execute_refresh_operation(operation_id: str, account_id: str) -> None:
             )
             ops_repo.mark_completed(db, operation)
         except TokenInvalidError:
-            accounts_repo.set_account_status(db, account, status="token_invalid")
+            accounts_repo.set_account_status(
+                db,
+                account,
+                status="load_failed" if is_initial_load else "token_invalid",
+                data_state=previous_data_state if is_initial_load else None,
+            )
             ops_repo.mark_failed(db, operation, "Token akun expired. Silakan otorisasi ulang.")
             logger.warning(
                 "Refresh failed due to invalid token | account_id=%s | provider=%s",
@@ -404,7 +488,7 @@ def execute_refresh_operation(operation_id: str, account_id: str) -> None:
             accounts_repo.set_account_status(
                 db,
                 account,
-                status=previous_status,
+                status="load_failed" if is_initial_load else previous_status,
                 data_state=previous_data_state,
             )
             ops_repo.mark_failed(db, operation, exc.message)
@@ -418,7 +502,7 @@ def execute_refresh_operation(operation_id: str, account_id: str) -> None:
             accounts_repo.set_account_status(
                 db,
                 account,
-                status=previous_status,
+                status="load_failed" if is_initial_load else previous_status,
                 data_state=previous_data_state,
             )
             ops_repo.mark_failed(db, operation, "Refresh metadata gagal")

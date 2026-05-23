@@ -6,6 +6,7 @@ import {
   scanLargeStaleFiles,
   type BatchDeleteResult,
   type LargeStaleFile,
+  type LargeStaleProviderFilter,
   type LargeStaleSort,
   type LargeStaleThresholds,
   type LargeStaleTypeFilter,
@@ -16,6 +17,7 @@ import { getErrorMessage } from "@/shared/api/errors"
 
 interface UseLargeStaleOptions {
   typeFilter: LargeStaleTypeFilter
+  providerFilter: LargeStaleProviderFilter
   sortBy: LargeStaleSort
   limit?: number
   offset?: number
@@ -31,7 +33,7 @@ interface UseLargeStaleResult {
   isLoading: boolean
   error: string | null
   refetch: () => Promise<void>
-  refresh: () => Promise<void>
+  refresh: () => Promise<ListLargeStaleResult | null>
   batchDelete: (ids: string[]) => Promise<BatchDeleteResult>
 }
 
@@ -42,6 +44,7 @@ const INITIAL_THRESHOLDS: LargeStaleThresholds = {
 
 export function useLargeStale({
   typeFilter,
+  providerFilter,
   sortBy,
   limit = 50,
   offset = 0,
@@ -64,24 +67,31 @@ export function useLargeStale({
   }, [])
 
   const fetchFiles = useCallback(
-    async (type: LargeStaleTypeFilter, sort: LargeStaleSort, pageOffset: number) => {
+    async (
+      type: LargeStaleTypeFilter,
+      sort: LargeStaleSort,
+      pageOffset: number,
+    ): Promise<ListLargeStaleResult | null> => {
       setIsLoading(true)
       setError(null)
       try {
         const result = await listLargeStaleFiles({
           type,
+          provider: providerFilter,
           sort,
           limit,
           offset: pageOffset,
         })
         applyResult(result)
+        return result
       } catch (err) {
         setError(getErrorMessage(err))
+        return null
       } finally {
         setIsLoading(false)
       }
     },
-    [applyResult, limit],
+    [applyResult, limit, providerFilter],
   )
 
   useEffect(() => {
@@ -98,7 +108,13 @@ export function useLargeStale({
     let cancelled = false
     setIsLoading(true)
     setError(null)
-    listLargeStaleFiles({ type: typeFilter, sort: sortBy, limit, offset })
+    listLargeStaleFiles({
+      type: typeFilter,
+      provider: providerFilter,
+      sort: sortBy,
+      limit,
+      offset,
+    })
       .then((result) => {
         if (cancelled) return
         applyResult(result)
@@ -114,17 +130,16 @@ export function useLargeStale({
     return () => {
       cancelled = true
     }
-  }, [applyResult, enabled, typeFilter, sortBy, limit, offset])
+  }, [applyResult, enabled, typeFilter, providerFilter, sortBy, limit, offset])
 
-  const refetch = useCallback(
-    () => fetchFiles(typeFilter, sortBy, offset),
-    [fetchFiles, typeFilter, sortBy, offset],
-  )
+  const refetch = useCallback(async () => {
+    await fetchFiles(typeFilter, sortBy, offset)
+  }, [fetchFiles, typeFilter, sortBy, offset])
 
   // "Scan ulang" menulis ulang hasil Large-Stale tersimpan, lalu membaca snapshot terbaru.
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<ListLargeStaleResult | null> => {
     await scanLargeStaleFiles()
-    await fetchFiles(typeFilter, sortBy, offset)
+    return fetchFiles(typeFilter, sortBy, offset)
   }, [fetchFiles, typeFilter, sortBy, offset])
 
   const batchDelete = useCallback(

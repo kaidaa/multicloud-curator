@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
@@ -21,6 +19,7 @@ from app.features.accounts.service import (
     handle_oauth_callback,
     initiate_connect,
     initiate_reauthorize,
+    latest_account_data_at,
     list_accounts,
     trigger_refresh,
     trigger_refresh_all,
@@ -40,6 +39,7 @@ async def connect_initiate(
 
 @router.get("/connect/callback", include_in_schema=True)
 async def connect_callback(
+    background_tasks: BackgroundTasks,
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
     error: str | None = Query(default=None),
@@ -50,6 +50,7 @@ async def connect_callback(
         code=code,
         state=state,
         provider_error=error,
+        background_tasks=background_tasks,
     )
     return RedirectResponse(url=redirect_url, status_code=302)
 
@@ -58,7 +59,7 @@ async def connect_callback(
 async def accounts_list(db: Session = Depends(get_db)) -> DataEnvelope[list[AccountResponse]]:
     return DataEnvelope(
         data=list_accounts(db),
-        meta=EnvelopeMeta(snapshot_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")),
+        meta=EnvelopeMeta(snapshot_at=latest_account_data_at(db)),
     )
 
 

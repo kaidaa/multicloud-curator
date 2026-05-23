@@ -4,6 +4,7 @@ import { DuplicatesUiStateProvider } from "@/features/duplicates/contexts/Duplic
 import { LargeStaleUiStateProvider } from "@/features/large_stale/contexts/LargeStaleUiStateContext"
 import { SecurityUiStateProvider } from "@/features/security/contexts/SecurityUiStateContext"
 import { Sidebar } from "@/layouts/Sidebar"
+import { GlobalAccountLoadIndicator } from "@/shared/components/GlobalAccountLoadIndicator"
 import { ToastContainer } from "@/shared/components/Toast"
 import { AccountsProvider } from "@/shared/contexts/AccountsContext"
 import { ToastProvider } from "@/shared/hooks/useToast"
@@ -18,6 +19,7 @@ export function AppLayout() {
               <div className="flex h-screen overflow-hidden bg-bg">
                 <Sidebar />
                 <main className="flex-1 overflow-y-auto px-8 py-9">
+                  <GlobalAccountLoadIndicator />
                   <Outlet />
                 </main>
                 <ToastContainer />

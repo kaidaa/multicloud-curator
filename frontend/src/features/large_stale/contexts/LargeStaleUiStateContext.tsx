@@ -8,6 +8,7 @@ import {
 } from "react"
 
 import type {
+  LargeStaleProviderFilter,
   LargeStaleSort,
   LargeStaleTypeFilter,
 } from "@/features/large_stale/api"
@@ -15,6 +16,8 @@ import type {
 interface LargeStaleUiStateValue {
   typeFilter: LargeStaleTypeFilter
   setTypeFilter: (value: LargeStaleTypeFilter) => void
+  providerFilter: LargeStaleProviderFilter
+  setProviderFilter: (value: LargeStaleProviderFilter) => void
   sortBy: LargeStaleSort
   setSortBy: (value: LargeStaleSort) => void
   selectedFileIds: ReadonlySet<string>
@@ -34,6 +37,7 @@ const LargeStaleUiStateContext = createContext<LargeStaleUiStateValue | undefine
 // tetap lokal di LargeStalePage — re-fetch otomatis saat page mount lagi.
 export function LargeStaleUiStateProvider({ children }: { children: ReactNode }) {
   const [typeFilter, setTypeFilter] = useState<LargeStaleTypeFilter>("all")
+  const [providerFilter, setProviderFilter] = useState<LargeStaleProviderFilter>("all")
   const [sortBy, setSortBy] = useState<LargeStaleSort>("size_desc")
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
   const [hasRequestedScan, setHasRequestedScan] = useState(false)
@@ -68,6 +72,8 @@ export function LargeStaleUiStateProvider({ children }: { children: ReactNode })
     () => ({
       typeFilter,
       setTypeFilter,
+      providerFilter,
+      setProviderFilter,
       sortBy,
       setSortBy,
       selectedFileIds,
@@ -79,6 +85,7 @@ export function LargeStaleUiStateProvider({ children }: { children: ReactNode })
     }),
     [
       typeFilter,
+      providerFilter,
       sortBy,
       selectedFileIds,
       hasRequestedScan,

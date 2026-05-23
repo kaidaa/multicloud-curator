@@ -11,19 +11,24 @@ import { formatBytes } from "@/shared/utils/formatSize"
 interface BreakdownCardProps {
   account: Account
   quotaAccount?: QuotaAccount
+  isLoading?: boolean
 }
 
 const STATUS_LABEL: Record<Account["status"], { label: string; variant: BadgeVariant }> = {
   active: { label: "Aktif", variant: "success" },
-  never_synced: { label: "Belum disinkronisasi", variant: "warning" },
-  syncing: { label: "Memuat", variant: "warning" },
-  token_invalid: { label: "Token kadaluwarsa", variant: "danger" },
-  revoked: { label: "Otorisasi dicabut", variant: "danger" },
+  never_synced: { label: "Memuat data", variant: "warning" },
+  syncing: { label: "Memuat data", variant: "warning" },
+  token_invalid: { label: "Perlu otorisasi ulang", variant: "danger" },
+  revoked: { label: "Akses dicabut", variant: "danger" },
+  load_failed: { label: "Gagal memuat", variant: "danger" },
 }
 
-export function BreakdownCard({ account, quotaAccount }: BreakdownCardProps) {
-  const meta = STATUS_LABEL[account.status]
-  const hasData = account.status !== "never_synced"
+export function BreakdownCard({
+  account,
+  quotaAccount,
+  isLoading = false,
+}: BreakdownCardProps) {
+  const meta = isLoading ? STATUS_LABEL.syncing : STATUS_LABEL[account.status]
   const quotaUsedBytes = quotaAccount?.usedBytes ?? account.quotaUsedBytes
   const quotaTotalBytes = quotaAccount?.totalBytes ?? account.quotaTotalBytes
 
@@ -41,23 +46,17 @@ export function BreakdownCard({ account, quotaAccount }: BreakdownCardProps) {
       </header>
 
       <div className="mt-3">
-        {hasData ? (
-          <>
-            <p className="text-xs text-ink-soft">
-              <span className="font-medium">{formatBytes(quotaUsedBytes)}</span>{" "}
-              <span className="text-muted">/ {formatBytes(quotaTotalBytes)}</span>
-            </p>
-            <div className="mt-1.5">
-              <QuotaBar
-                usedBytes={quotaUsedBytes}
-                totalBytes={quotaTotalBytes}
-                showLabel={false}
-              />
-            </div>
-          </>
-        ) : (
-          <p className="text-xs text-muted">- / {formatBytes(quotaTotalBytes)}</p>
-        )}
+        <p className="text-xs text-ink-soft">
+          <span className="font-medium">{formatBytes(quotaUsedBytes)}</span>{" "}
+          <span className="text-muted">/ {formatBytes(quotaTotalBytes)}</span>
+        </p>
+        <div className="mt-1.5">
+          <QuotaBar
+            usedBytes={quotaUsedBytes}
+            totalBytes={quotaTotalBytes}
+            showLabel={false}
+          />
+        </div>
       </div>
     </article>
   )
