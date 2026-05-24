@@ -1,5 +1,3 @@
-"""Pydantic schemas for account management endpoints."""
-
 from __future__ import annotations
 
 from typing import Literal
@@ -7,7 +5,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 ProviderName = Literal["google", "dropbox"]
-AccountStatus = Literal["active", "token_invalid", "revoked", "syncing", "never_synced"]
+AccountStatus = Literal[
+    "active",
+    "token_invalid",
+    "revoked",
+    "syncing",
+    "never_synced",
+    "load_failed",
+]
 DataState = Literal["BelumTersedia", "Parsial", "Lengkap"]
 
 

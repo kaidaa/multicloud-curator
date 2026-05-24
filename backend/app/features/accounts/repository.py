@@ -1,5 +1,3 @@
-"""Persistence helpers for account management and OAuth state."""
-
 from __future__ import annotations
 
 import hashlib
@@ -125,8 +123,12 @@ def list_accounts(db: Session) -> list[Account]:
     return list(db.execute(stmt).scalars().all())
 
 
+def latest_successful_sync_at(db: Session) -> datetime | None:
+    return db.execute(select(func.max(Account.last_good_sync_at))).scalar_one()
+
+
 def list_refreshable_accounts(db: Session) -> list[Account]:
-    stmt = select(Account).where(Account.status.not_in(["token_invalid", "revoked"]))
+    stmt = select(Account).where(Account.status.not_in(["token_invalid", "revoked", "load_failed"]))
     return list(db.execute(stmt).scalars().all())
 
 
@@ -257,10 +259,10 @@ def replace_files_for_account(
     *,
     account_id: str,
     files: list[NormalizedFile],
-) -> None:
-    db.execute(delete(File).where(File.account_id == account_id))
-    _insert_files(db, account_id=account_id, files=files)
+) -> int:
+    deleted_count = _sync_files_for_account(db, account_id=account_id, files=files)
     db.commit()
+    return deleted_count
 
 
 def replace_files_if_partial(
@@ -268,43 +270,103 @@ def replace_files_if_partial(
     *,
     account: Account,
     files: list[NormalizedFile],
-) -> None:
+) -> int:
     if account.data_state == "Lengkap":
-        return
-    db.execute(delete(File).where(File.account_id == account.id))
-    _insert_files(db, account_id=account.id, files=files)
+        return 0
+    deleted_count = _sync_files_for_account(db, account_id=account.id, files=files)
     db.commit()
+    return deleted_count
 
 
-def _insert_files(
+def _sync_files_for_account(
     db: Session,
     *,
     account_id: str,
     files: list[NormalizedFile],
-) -> None:
+) -> int:
     now = utc_now()
-    for file_item in files:
-        db.add(
-            File(
-                account_id=account_id,
-                file_id=file_item["file_id"],
-                file_name=file_item["file_name"],
-                path=file_item.get("path"),
-                size_bytes=file_item.get("size_bytes"),
-                mime_type=file_item.get("mime_type"),
-                modified_time=file_item["modified_time"],
-                hash=file_item.get("hash"),
-                owner_account=file_item.get("owner_account") or account_id,
-                provider=file_item["provider"],
-                sharing_status=file_item.get("sharing_status"),
-                web_view_link=file_item.get("web_view_link"),
-                trashed=bool(file_item.get("trashed", False)),
-                is_folder=bool(file_item.get("is_folder", False)),
-                is_owned=bool(file_item.get("is_owned", False)),
-                created_at=now,
-                updated_at=now,
+    existing_files = {
+        file.file_id: file
+        for file in db.execute(select(File).where(File.account_id == account_id)).scalars().all()
+    }
+    incoming_files = {file_item["file_id"]: file_item for file_item in files}
+
+    for provider_file_id, file_item in incoming_files.items():
+        existing = existing_files.get(provider_file_id)
+        if existing is None:
+            db.add(_build_file(account_id=account_id, file_item=file_item, now=now))
+            continue
+        _apply_file_metadata(existing, account_id=account_id, file_item=file_item, now=now)
+
+    deleted_provider_ids = set(existing_files) - set(incoming_files)
+    if deleted_provider_ids:
+        db.execute(
+            delete(File).where(
+                File.account_id == account_id,
+                File.file_id.in_(deleted_provider_ids),
             )
         )
+    return len(deleted_provider_ids)
+
+
+def _build_file(
+    *,
+    account_id: str,
+    file_item: NormalizedFile,
+    now: datetime,
+) -> File:
+    return File(
+        account_id=account_id,
+        file_id=file_item["file_id"],
+        file_name=file_item["file_name"],
+        path=file_item.get("path"),
+        size_bytes=file_item.get("size_bytes"),
+        mime_type=file_item.get("mime_type"),
+        modified_time=file_item["modified_time"],
+        hash=file_item.get("hash"),
+        owner_account=file_item.get("owner_account") or account_id,
+        provider=file_item["provider"],
+        sharing_status=file_item.get("sharing_status"),
+        location_type=file_item.get("location_type"),
+        open_url=file_item.get("open_url"),
+        open_url_type=file_item.get("open_url_type"),
+        has_public_shared_link=bool(file_item.get("has_public_shared_link", False)),
+        shared_link_url=file_item.get("shared_link_url"),
+        shared_link_visibility=file_item.get("shared_link_visibility"),
+        trashed=bool(file_item.get("trashed", False)),
+        is_folder=bool(file_item.get("is_folder", False)),
+        is_owned=bool(file_item.get("is_owned", False)),
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _apply_file_metadata(
+    file: File,
+    *,
+    account_id: str,
+    file_item: NormalizedFile,
+    now: datetime,
+) -> None:
+    file.file_name = file_item["file_name"]
+    file.path = file_item.get("path")
+    file.size_bytes = file_item.get("size_bytes")
+    file.mime_type = file_item.get("mime_type")
+    file.modified_time = file_item["modified_time"]
+    file.hash = file_item.get("hash")
+    file.owner_account = file_item.get("owner_account") or account_id
+    file.provider = file_item["provider"]
+    file.sharing_status = file_item.get("sharing_status")
+    file.location_type = file_item.get("location_type")
+    file.open_url = file_item.get("open_url")
+    file.open_url_type = file_item.get("open_url_type")
+    file.has_public_shared_link = bool(file_item.get("has_public_shared_link", False))
+    file.shared_link_url = file_item.get("shared_link_url")
+    file.shared_link_visibility = file_item.get("shared_link_visibility")
+    file.trashed = bool(file_item.get("trashed", False))
+    file.is_folder = bool(file_item.get("is_folder", False))
+    file.is_owned = bool(file_item.get("is_owned", False))
+    file.updated_at = now
 
 
 def count_files_for_account(db: Session, account_id: str) -> int:
