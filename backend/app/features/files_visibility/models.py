@@ -1,8 +1,6 @@
-"""File metadata model.
+"""Provider file metadata after normalization.
 
-Skema 14 atribut internal hasil normalisasi dari format native provider.
-Folder tidak di-insert ke tabel ini; hanya file. Flag ``is_folder`` disediakan
-sebagai safeguard tipe data, tapi semua row diharapkan ``is_folder = False``.
+Folders are excluded; ``is_folder`` remains as a provider-data safeguard.
 """
 
 from __future__ import annotations
@@ -43,7 +41,12 @@ class File(Base):
     owner_account: Mapped[str] = mapped_column(String, nullable=False)
     provider: Mapped[str] = mapped_column(String, nullable=False, index=True)
     sharing_status: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
-    web_view_link: Mapped[str | None] = mapped_column(String, nullable=True)
+    location_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    open_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    open_url_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    has_public_shared_link: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    shared_link_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    shared_link_visibility: Mapped[str | None] = mapped_column(String, nullable=True)
     trashed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_folder: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_owned: Mapped[bool] = mapped_column(Boolean, nullable=False, index=True)

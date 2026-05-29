@@ -1,12 +1,10 @@
-"""Dropbox OAuth and metadata adapter."""
-
 from __future__ import annotations
 
 import logging
 import mimetypes
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import dropbox
 import httpx
@@ -57,6 +55,44 @@ def _ensure_config(settings: Settings) -> None:
 def _guess_mime_type(name: str) -> str:
     mime_type, _encoding = mimetypes.guess_type(name)
     return mime_type or "application/octet-stream"
+
+
+def _tag_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value.get(".tag") or value.get("tag")
+    tag = getattr(value, "tag", None)
+    if isinstance(tag, str):
+        return tag
+    private_tag = getattr(value, "_tag", None)
+    if isinstance(private_tag, str):
+        return private_tag
+    return None
+
+
+def _shared_link_visibility(link: Any) -> str | None:
+    permissions = getattr(link, "link_permissions", None)
+    if permissions is None:
+        return None
+    for attr in ("resolved_visibility", "requested_visibility"):
+        tag = _tag_value(getattr(permissions, attr, None))
+        if tag:
+            return tag
+    return None
+
+
+def _dropbox_quickview_url(path_display: str | None, file_id: str) -> str:
+    quickview_id = quote(file_id, safe="")
+    if not path_display:
+        return f"https://www.dropbox.com/home?quickview={quickview_id}"
+    parent_path = path_display.rsplit("/", 1)[0].strip("/")
+    if not parent_path:
+        return f"https://www.dropbox.com/home?quickview={quickview_id}"
+    encoded_parent = "/".join(
+        quote(segment, safe="") for segment in parent_path.split("/") if segment
+    )
+    return f"https://www.dropbox.com/home/{encoded_parent}?quickview={quickview_id}"
 
 
 class DropboxOAuthClient(OAuthClient):
@@ -180,7 +216,7 @@ class DropboxAdapter(BaseAdapter):
     def get_account_info(self) -> AccountInfo:
         try:
             account = self.client.users_get_current_account()
-        except Exception as exc:  # Dropbox SDK exposes several provider-specific exception classes.
+        except Exception as exc:  # Dropbox SDK has several provider-specific exception types.
             self._raise_dropbox_error(exc, "get_account_info")
         return {
             "email": account.email,
@@ -202,15 +238,19 @@ class DropboxAdapter(BaseAdapter):
 
     def fetch_metadata(self, limit: int | None = None) -> list[NormalizedFile]:
         public_links = self._public_links()
-        public_ids: dict[str, str] = {}
-        public_paths: dict[str, str] = {}
+        public_ids: dict[str, dict[str, str | None]] = {}
+        public_paths: dict[str, dict[str, str | None]] = {}
         for link in public_links:
             link_id = getattr(link, "id", None)
             path_lower = getattr(link, "path_lower", None)
+            link_info = {
+                "url": getattr(link, "url", None),
+                "visibility": _shared_link_visibility(link),
+            }
             if link_id:
-                public_ids[link_id] = link.url
+                public_ids[link_id] = link_info
             if path_lower:
-                public_paths[path_lower] = link.url
+                public_paths[path_lower] = link_info
 
         results: list[NormalizedFile] = []
         try:
@@ -259,10 +299,13 @@ class DropboxAdapter(BaseAdapter):
     def _normalize_file(
         self,
         entry: Any,
-        public_ids: dict[str, str],
-        public_paths: dict[str, str],
+        public_ids: dict[str, dict[str, str | None]],
+        public_paths: dict[str, dict[str, str | None]],
     ) -> NormalizedFile:
         link = public_ids.get(entry.id) or public_paths.get(entry.path_lower)
+        link_url = link["url"] if link else None
+        link_visibility = link["visibility"] if link else None
+        has_public_link = bool(link and (link_visibility in (None, "public")))
         return {
             "file_id": entry.id,
             "file_name": entry.name,
@@ -275,8 +318,13 @@ class DropboxAdapter(BaseAdapter):
             "hash": entry.content_hash,
             "owner_account": self.credentials.account_id,
             "provider": "dropbox",
-            "sharing_status": "public" if link else "private",
-            "web_view_link": link,
+            "sharing_status": "public" if has_public_link else "private",
+            "location_type": None,
+            "open_url": _dropbox_quickview_url(entry.path_display, entry.id),
+            "open_url_type": "dropbox_private_quickview",
+            "has_public_shared_link": has_public_link,
+            "shared_link_url": link_url,
+            "shared_link_visibility": link_visibility or ("public" if link else None),
             "trashed": False,
             "is_folder": False,
             "is_owned": True,

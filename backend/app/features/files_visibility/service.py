@@ -1,5 +1,3 @@
-"""Business logic for Files Visibility endpoints."""
-
 from __future__ import annotations
 
 import mimetypes
@@ -167,11 +165,13 @@ def to_activity_item(file: File, *, account_email: str) -> FileActivityItemRespo
         provider=file.provider,
         is_owned=file.is_owned,
         path=sanitize_display_path(provider=file.provider, path=file.path),
-        web_view_link=file.web_view_link,
+        location_type=file.location_type,
+        open_url=file.open_url,
+        open_url_type=file.open_url_type,
     )
 
 
-def list_activity(db: Session, *, limit: int) -> tuple[list[FileActivityItemResponse], str]:
+def list_activity(db: Session, *, limit: int) -> tuple[list[FileActivityItemResponse], str | None]:
     rows = repository.list_recent_activity_files(db, limit=limit)
     snapshot_at = repository.latest_file_snapshot_at(db)
     return [to_activity_item(row.file, account_email=row.account_email) for row in rows], _iso(
@@ -210,7 +210,7 @@ def search_files(
     sort: SearchSort,
     limit: int,
     offset: int,
-) -> tuple[list[FileActivityItemResponse], int, str]:
+) -> tuple[list[FileActivityItemResponse], int, str | None]:
     normalized_query = query.strip()
     if len(normalized_query) < 2:
         raise ValidationError(
@@ -255,7 +255,7 @@ def _to_quota_account(account: Account) -> QuotaAccountResponse:
     )
 
 
-def get_quota_summary(db: Session) -> tuple[QuotaSummaryResponse, str]:
+def get_quota_summary(db: Session) -> tuple[QuotaSummaryResponse, str | None]:
     accounts = repository.list_accounts_for_quota(db)
     per_account = [_to_quota_account(account) for account in accounts]
     data = QuotaSummaryResponse(

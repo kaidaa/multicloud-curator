@@ -1,5 +1,3 @@
-"""Factory helpers for provider OAuth clients and metadata adapters."""
-
 from __future__ import annotations
 
 from app.adapters.base import BaseAdapter, OAuthClient, ProviderCredentials

@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.adapters.base import ProviderCredentials
+from app.adapters.dropbox import _dropbox_quickview_url
 from app.adapters.google_drive import GoogleDriveAdapter
 from app.config import Settings
 from app.features.accounts.models import Account
@@ -55,7 +56,9 @@ def _file(
     mime_type: str | None,
     modified_time: datetime,
     path: str | None = "/Work",
-    web_view_link: str | None = "https://example.com/file",
+    location_type: str | None = None,
+    open_url: str | None = "https://example.com/file",
+    open_url_type: str | None = "dropbox_private_quickview",
     trashed: bool = False,
     is_folder: bool = False,
     is_owned: bool = True,
@@ -72,7 +75,12 @@ def _file(
         owner_account=account.id,
         provider=account.provider,
         sharing_status="private",
-        web_view_link=web_view_link,
+        location_type=location_type,
+        open_url=open_url,
+        open_url_type=open_url_type,
+        has_public_shared_link=False,
+        shared_link_url=None,
+        shared_link_visibility=None,
         trashed=trashed,
         is_folder=is_folder,
         is_owned=is_owned,
@@ -121,6 +129,37 @@ def test_google_adapter_does_not_normalize_parent_id_as_path() -> None:
     )
 
     assert normalized["path"] is None
+    assert normalized["location_type"] == "MY_DRIVE"
+    assert normalized["open_url"] == "https://drive.google.com/file/d/google-file-1/view"
+    assert normalized["open_url_type"] == "google_web_view"
+
+
+def test_dropbox_quickview_url_uses_encoded_parent_and_file_id() -> None:
+    assert (
+        _dropbox_quickview_url(
+            "/Backups/Perjanjian_Vendor_Orion_Signed.pdf",
+            "id:MHIBwAywZYgAAAAAAAAADA",
+        )
+        == "https://www.dropbox.com/home/Backups?quickview=id%3AMHIBwAywZYgAAAAAAAAADA"
+    )
+    assert (
+        _dropbox_quickview_url(
+            "/Folder Dengan Spasi/File ID.txt",
+            "id:abc:def",
+        )
+        == "https://www.dropbox.com/home/Folder%20Dengan%20Spasi?quickview=id%3Aabc%3Adef"
+    )
+    assert (
+        _dropbox_quickview_url(
+            "/Client A/Legal & Tax/File.pdf",
+            "id:nested",
+        )
+        == "https://www.dropbox.com/home/Client%20A/Legal%20%26%20Tax?quickview=id%3Anested"
+    )
+    assert (
+        _dropbox_quickview_url("/Root.pdf", "id:root")
+        == "https://www.dropbox.com/home?quickview=id%3Aroot"
+    )
 
 
 def test_display_path_sanitizes_legacy_google_opaque_id_only() -> None:
@@ -138,11 +177,11 @@ def test_visibility_handles_empty_database(db_session: Session) -> None:
     quota, quota_snapshot = get_quota_summary(db_session)
 
     assert activity == []
-    assert activity_snapshot.endswith("Z")
+    assert activity_snapshot is None
     assert quota.total_used_bytes == 0
     assert quota.total_capacity_bytes == 0
     assert quota.per_account == []
-    assert quota_snapshot.endswith("Z")
+    assert quota_snapshot is None
 
 
 def test_search_route_returns_envelope_and_pagination(db_session: Session) -> None:
@@ -572,7 +611,8 @@ def test_activity_reads_refreshed_files_from_db_and_maps_contract_fields(
                 file_name="New.bin",
                 mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 modified_time=datetime(2026, 1, 2, 0, 0, 0),
-                web_view_link=None,
+                open_url=None,
+                open_url_type=None,
             ),
             _file(
                 account=active,
@@ -609,7 +649,8 @@ def test_activity_reads_refreshed_files_from_db_and_maps_contract_fields(
     assert data[0].type == "xlsx"
     assert data[0].account_id == active.id
     assert data[0].account_email == "kai@example.com"
-    assert data[0].web_view_link is None
+    assert data[0].open_url is None
+    assert data[0].open_url_type is None
     assert "encrypted_access_token" not in data[0].model_dump()
     assert snapshot_at.endswith("Z")
 
@@ -629,7 +670,7 @@ def test_quota_summary_aggregates_connected_accounts(db_session: Session) -> Non
                 provider="dropbox",
                 provider_account_id="dropbox-1",
                 email="kai@example.com",
-                last_good_sync_at=datetime(2026, 1, 1, 0, 0, 0),
+                last_good_sync_at=datetime(2026, 1, 3, 0, 0, 0),
                 quota_used_bytes=20,
                 quota_total_bytes=200,
             ),
@@ -642,4 +683,4 @@ def test_quota_summary_aggregates_connected_accounts(db_session: Session) -> Non
     assert data.total_used_bytes == 30
     assert data.total_capacity_bytes == 300
     assert [account.provider for account in data.per_account] == ["dropbox", "google"]
-    assert snapshot_at.endswith("Z")
+    assert snapshot_at == "2026-01-03T00:00:00Z"

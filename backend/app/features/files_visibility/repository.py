@@ -1,5 +1,3 @@
-"""Database queries for Files Visibility endpoints."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -85,4 +83,4 @@ def list_accounts_for_quota(db: Session) -> list[Account]:
 
 
 def latest_account_snapshot_at(db: Session) -> datetime | None:
-    return db.execute(select(func.max(Account.updated_at))).scalar_one()
+    return db.execute(select(func.max(Account.last_good_sync_at))).scalar_one()

@@ -1,5 +1,3 @@
-"""Google Drive OAuth and metadata adapter."""
-
 from __future__ import annotations
 
 import logging
@@ -64,6 +62,16 @@ def _parse_dt(value: str | None) -> datetime:
     if not value:
         return datetime.now(timezone.utc)
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _classify_google_location(item: dict[str, Any]) -> str:
+    if item.get("driveId"):
+        return "SHARED_DRIVE"
+    if item.get("sharedWithMeTime") and item.get("ownedByMe") is False:
+        return "SHARED_WITH_ME"
+    if item.get("ownedByMe") is True:
+        return "MY_DRIVE"
+    return "UNKNOWN"
 
 
 def _google_credentials(
@@ -276,7 +284,7 @@ class GoogleDriveAdapter(BaseAdapter):
         fields = (
             "nextPageToken,"
             "files(id,name,mimeType,size,modifiedTime,parents,md5Checksum,"
-            "ownedByMe,trashed,webViewLink,permissions,shared)"
+            "ownedByMe,trashed,webViewLink,permissions,shared,driveId,sharedWithMeTime)"
         )
         while True:
             page_size = min(100, limit - len(files)) if limit else 100
@@ -316,11 +324,11 @@ class GoogleDriveAdapter(BaseAdapter):
             sharing_status = None
         else:
             sharing_status = "public" if has_anyone else "private"
+        google_web_url = item.get("webViewLink")
         return {
             "file_id": item["id"],
             "file_name": item.get("name", ""),
-            # Google ``parents`` contains opaque folder IDs, not human-readable paths.
-            # Keep path empty until a folder-name resolver is implemented.
+            # Google parent IDs are opaque; leave path empty until names are resolved.
             "path": None,
             "size_bytes": int(item["size"]) if item.get("size") else None,
             "mime_type": item.get("mimeType"),
@@ -329,7 +337,12 @@ class GoogleDriveAdapter(BaseAdapter):
             "owner_account": self.credentials.account_id,
             "provider": "google",
             "sharing_status": sharing_status,
-            "web_view_link": item.get("webViewLink"),
+            "location_type": _classify_google_location(item),
+            "open_url": google_web_url,
+            "open_url_type": "google_web_view" if google_web_url else None,
+            "has_public_shared_link": has_anyone,
+            "shared_link_url": google_web_url if has_anyone else None,
+            "shared_link_visibility": "public" if has_anyone else None,
             "trashed": bool(item.get("trashed", False)),
             "is_folder": False,
             "is_owned": bool(item.get("ownedByMe", False)),

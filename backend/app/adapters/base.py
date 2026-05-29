@@ -1,9 +1,3 @@
-"""Provider adapter contracts.
-
-Adapter layer owns provider communication and provider quirks. It never writes
-database rows directly; service/repository persists encrypted tokens and data.
-"""
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -34,22 +28,18 @@ class TokenBundle:
 
 
 class AccountInfo(TypedDict):
-    """Return type ``get_account_info()``."""
-
     email: str
     provider_account_id: str
     provider: str
 
 
 class QuotaInfo(TypedDict):
-    """Return type ``get_quota()``."""
-
     used_bytes: int
     total_bytes: int
 
 
 class NormalizedFile(TypedDict, total=False):
-    """14-attribute internal file metadata normalized by adapters."""
+    """Provider file metadata after adapter normalization."""
 
     file_id: str
     file_name: str
@@ -61,7 +51,12 @@ class NormalizedFile(TypedDict, total=False):
     owner_account: str
     provider: str
     sharing_status: str | None
-    web_view_link: str | None
+    location_type: str | None
+    open_url: str | None
+    open_url_type: str | None
+    has_public_shared_link: bool
+    shared_link_url: str | None
+    shared_link_visibility: str | None
     trashed: bool
     is_folder: bool
     is_owned: bool
@@ -86,7 +81,7 @@ class OAuthClient(ABC):
 
 
 class BaseAdapter(ABC):
-    """Abstract base for provider data adapters."""
+    """Provider metadata adapter contract."""
 
     provider_name: str
 
@@ -111,11 +106,11 @@ class BaseAdapter(ABC):
 
     @abstractmethod
     def delete_file(self, file_id: str) -> bool:
-        """Delete provider file. Not used by M3-1, but part of adapter contract."""
+        """Delete provider file."""
 
     @abstractmethod
     def set_sharing_private(self, file_id: str) -> bool:
-        """Revoke public sharing. Not used by M3-1, but part of adapter contract."""
+        """Revoke public sharing."""
 
 
 def coerce_scopes(scopes: Any, fallback: list[str]) -> list[str]:

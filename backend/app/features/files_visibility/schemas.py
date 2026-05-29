@@ -1,5 +1,3 @@
-"""Pydantic schemas for Files Visibility endpoints."""
-
 from __future__ import annotations
 
 from typing import Literal
@@ -7,6 +5,8 @@ from typing import Literal
 from pydantic import BaseModel
 
 ProviderName = Literal["google", "dropbox"]
+LocationType = Literal["MY_DRIVE", "SHARED_WITH_ME", "SHARED_DRIVE", "UNKNOWN"]
+OpenUrlType = Literal["google_web_view", "dropbox_private_quickview"]
 SearchProviderFilter = Literal["all", "google", "dropbox"]
 SearchSort = Literal["modified_desc", "modified_asc", "name_asc"]
 SearchTypeFilter = Literal["all", "photo", "video", "document", "audio", "other"]
@@ -25,7 +25,9 @@ class FileActivityItemResponse(BaseModel):
     provider: ProviderName
     is_owned: bool
     path: str | None
-    web_view_link: str | None
+    location_type: LocationType | None
+    open_url: str | None
+    open_url_type: OpenUrlType | None
 
 
 class QuotaAccountResponse(BaseModel):
