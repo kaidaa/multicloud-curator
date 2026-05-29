@@ -1,3 +1,33 @@
-.venv/
-__pycache__/
+# Backend
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
 *.pyc
+*.pyo
+backend/.env
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+backend/logs/*.log
+backend/logs/*.log.*
+backend/app/static/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/htmlcov/
+backend/.coverage
+backend/app.db
+
+#Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+frontend/.env.local
+frontend/coverage/
+
+#OS / Edito
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
