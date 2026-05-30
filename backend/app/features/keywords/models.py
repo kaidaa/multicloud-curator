@@ -1,8 +1,7 @@
-"""SensitiveKeyword model.
+"""Sensitive keyword storage.
 
-Default keywords (KTP, NPWP, BPJS) di-seed via migration awal. Unique constraint
-pada ``word`` case-sensitive di SQLite; service layer melakukan check
-case-insensitive sebelum insert untuk mencegah varian seperti 'ktp' dan 'KTP'.
+SQLite unique constraints are case-sensitive, so the service layer performs the
+case-insensitive duplicate check.
 """
 
 from __future__ import annotations

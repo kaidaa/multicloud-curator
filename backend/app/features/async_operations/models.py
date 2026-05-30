@@ -1,7 +1,6 @@
-"""Operation model: persistensi status async operation.
+"""Async operation status tracking.
 
-Tracking 3 jenis operasi: refresh metadata akun, duplicates_scan,
-security_scan. Lifecycle: queued -> running -> completed | failed.
+Lifecycle: queued -> running -> completed or failed.
 """
 
 from __future__ import annotations

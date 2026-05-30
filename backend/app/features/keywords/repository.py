@@ -1,5 +1,3 @@
-"""Persistence helpers for keyword management."""
-
 from __future__ import annotations
 
 from sqlalchemy import case, func, select

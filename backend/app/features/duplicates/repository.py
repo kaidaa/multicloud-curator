@@ -1,5 +1,3 @@
-"""Persistence helpers for duplicate detection."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,9 +7,12 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.features.accounts.models import Account
-from app.features.async_operations.models import Operation
 from app.features.duplicates.models import DuplicateGroup, DuplicateGroupMember
 from app.features.files_visibility.models import File
+from app.features.scan_metadata import repository as scan_metadata_repo
+from app.features.scan_metadata.schemas import ScanCoverageResponse
+
+DUPLICATES_SCAN_TYPE = "duplicates_scan"
 
 
 @dataclass(slots=True)
@@ -41,14 +42,25 @@ def list_files_for_scan(db: Session) -> list[File]:
     )
 
 
-def list_file_rows_for_scan(db: Session) -> list[FileWithAccount]:
-    rows = db.execute(
+def list_file_rows_for_scan(
+    db: Session,
+    *,
+    account_ids: set[str] | None = None,
+) -> list[FileWithAccount]:
+    if account_ids is not None and not account_ids:
+        return []
+    stmt = (
         select(File, Account)
         .join(Account, File.account_id == Account.id)
         .where(
             File.trashed.is_(False),
             File.is_folder.is_(False),
         )
+    )
+    if account_ids is not None:
+        stmt = stmt.where(File.account_id.in_(account_ids))
+    rows = db.execute(
+        stmt
     ).all()
     return [FileWithAccount(file=row[0], account=row[1]) for row in rows]
 
@@ -58,6 +70,7 @@ def replace_duplicate_groups(
     *,
     groups: list[tuple[str, list[File]]],
     scanned_at: datetime,
+    coverage: ScanCoverageResponse | None = None,
 ) -> None:
     db.execute(delete(DuplicateGroupMember))
     db.execute(delete(DuplicateGroup))
@@ -73,6 +86,13 @@ def replace_duplicate_groups(
         db.flush()
         for file in sorted(members, key=lambda item: (item.file_name.casefold(), item.id)):
             db.add(DuplicateGroupMember(group_id=group.id, file_id=file.id))
+    if coverage is not None:
+        scan_metadata_repo.replace_scan_metadata(
+            db,
+            scan_type=DUPLICATES_SCAN_TYPE,
+            scan_at=scanned_at,
+            coverage=coverage,
+        )
     db.commit()
 
 
@@ -82,15 +102,21 @@ def pick_representative_name(members: list[File]) -> str:
 
 
 def latest_scan_at(db: Session) -> datetime | None:
-    group_scan_at = db.execute(select(func.max(DuplicateGroup.scanned_at))).scalar_one()
-    if group_scan_at is not None:
-        return group_scan_at
-    return db.execute(
-        select(func.max(Operation.completed_at)).where(
-            Operation.operation_type == "duplicates_scan",
-            Operation.status == "completed",
-        )
-    ).scalar_one()
+    metadata = scan_metadata_repo.get_latest_scan_metadata(
+        db,
+        scan_type=DUPLICATES_SCAN_TYPE,
+    )
+    if metadata is not None:
+        return metadata.scan_at
+    return db.execute(select(func.max(DuplicateGroup.scanned_at))).scalar_one()
+
+
+def latest_scan_coverage(db: Session) -> ScanCoverageResponse | None:
+    metadata = scan_metadata_repo.get_latest_scan_metadata(
+        db,
+        scan_type=DUPLICATES_SCAN_TYPE,
+    )
+    return scan_metadata_repo.coverage_response(metadata)
 
 
 def list_duplicate_groups(db: Session) -> list[DuplicateGroupWithMembers]:

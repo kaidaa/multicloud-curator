@@ -1,5 +1,3 @@
-"""Pydantic schemas for security audit endpoints."""
-
 from __future__ import annotations
 
 from typing import Literal
@@ -9,6 +7,7 @@ from pydantic import BaseModel
 from app.features.files_visibility.schemas import ProviderName
 
 SecurityMode = Literal["sensitive", "public"]
+SecurityProviderFilter = Literal["all", "google", "dropbox"]
 
 
 class SecurityScanResponse(BaseModel):
@@ -34,7 +33,9 @@ class SecurityPublicFileResponse(BaseModel):
     deletable: bool
     deletable_reason: str | None
     path: str | None
-    web_view_link: str | None
+    location_type: str | None
+    open_url: str | None
+    open_url_type: str | None
 
 
 class BatchRevokeRequest(BaseModel):

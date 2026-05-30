@@ -1,7 +1,7 @@
-"""Account and OAuth state models.
+"""Account token storage and OAuth state tracking.
 
-Field encrypted_* menyimpan token Fernet-encrypted; jangan log nilai mentah.
-OAuthState menyimpan hash dari random state OAuth, bukan state mentah.
+Encrypted token fields store Fernet ciphertext. OAuth states store hashes, not
+raw state values.
 """
 
 from __future__ import annotations

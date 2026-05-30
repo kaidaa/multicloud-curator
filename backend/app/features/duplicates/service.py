@@ -1,5 +1,3 @@
-"""Business logic for duplicate detection and batch delete."""
-
 from __future__ import annotations
 
 import json
@@ -33,6 +31,8 @@ from app.features.files_visibility.service import (
     derive_file_type,
     sanitize_display_path,
 )
+from app.features.scan_metadata import repository as scan_metadata_repo
+from app.features.scan_metadata.schemas import ScanCoverageResponse
 from app.shared.audit_log_model import ActionLog
 from app.shared.encryption import decrypt_token
 from app.shared.exceptions import (
@@ -210,32 +210,49 @@ def trigger_duplicates_scan(
     )
 
 
+def run_duplicates_scan(
+    db: Session,
+    *,
+    scanned_at: datetime,
+) -> tuple[int, ScanCoverageResponse]:
+    account_snapshot = scan_metadata_repo.snapshot_connected_accounts(
+        accounts_repo.list_accounts(db)
+    )
+    rows = repository.list_file_rows_for_scan(
+        db,
+        account_ids=account_snapshot.active_account_ids,
+    )
+    files = [row.file for row in rows]
+    account_status_by_file_id = {row.file.id: row.account.status for row in rows}
+    coverage = scan_metadata_repo.coverage_from_active_accounts(account_snapshot)
+    groups = build_duplicate_groups(files, account_status_by_file_id=account_status_by_file_id)
+    repository.replace_duplicate_groups(
+        db,
+        groups=groups,
+        scanned_at=scanned_at,
+        coverage=coverage,
+    )
+    return len(files), coverage
+
+
 def execute_duplicates_scan(operation_id: str) -> None:
     db = SessionLocal()
     try:
         operation = ops_repo.get_operation(db, operation_id)
         ops_repo.mark_running(db, operation, label="Membaca metadata lokal")
-        rows = repository.list_file_rows_for_scan(db)
-        files = [row.file for row in rows]
-        account_status_by_file_id = {row.file.id: row.account.status for row in rows}
         ops_repo.update_progress(
             db,
             operation,
             current=0,
-            total=len(files),
+            total=0,
             label="Mendeteksi duplikasi",
         )
-        groups = build_duplicate_groups(files, account_status_by_file_id=account_status_by_file_id)
-        repository.replace_duplicate_groups(
-            db,
-            groups=groups,
-            scanned_at=ops_repo.utc_now(),
-        )
+        files_count, _coverage = run_duplicates_scan(db, scanned_at=ops_repo.utc_now())
         ops_repo.update_progress(
             db,
             operation,
-            current=len(files),
-            total=len(files),
+            current=files_count,
+            total=files_count,
             label="Scan duplikasi selesai",
         )
         ops_repo.mark_completed(db, operation)
@@ -277,7 +294,9 @@ def _to_member_response(row: repository.FileWithAccount) -> DuplicateMemberRespo
         deletable=deletable,
         deletable_reason=reason,
         path=sanitize_display_path(provider=file.provider, path=file.path),
-        web_view_link=file.web_view_link,
+        location_type=file.location_type,
+        open_url=file.open_url,
+        open_url_type=file.open_url_type,
     )
 
 
@@ -290,15 +309,24 @@ def _group_matches_type(group: repository.DuplicateGroupWithMembers, file_type: 
     )
 
 
+def _group_matches_provider(group: repository.DuplicateGroupWithMembers, provider: str) -> bool:
+    if provider == "all":
+        return True
+    return any(row.file.provider == provider for row in group.members)
+
+
 def list_duplicate_groups(
     db: Session,
     *,
     file_type: DuplicateTypeFilter,
+    provider: str = "all",
     limit: int,
     offset: int,
-) -> tuple[list[DuplicateGroupResponse], int, str | None]:
+) -> tuple[list[DuplicateGroupResponse], int, str | None, ScanCoverageResponse | None]:
     groups = [
-        group for group in repository.list_duplicate_groups(db) if _group_matches_type(group, file_type)
+        group
+        for group in repository.list_duplicate_groups(db)
+        if _group_matches_provider(group, provider) and _group_matches_type(group, file_type)
     ]
     total = len(groups)
     paginated = groups[offset : offset + limit]
@@ -313,7 +341,7 @@ def list_duplicate_groups(
         )
         for item in paginated
     ]
-    return data, total, _iso(repository.latest_scan_at(db))
+    return data, total, _iso(repository.latest_scan_at(db)), repository.latest_scan_coverage(db)
 
 
 def _failure(file_id: str, error_code: str, message: str) -> BatchDeleteFailureItem:

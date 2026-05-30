@@ -1,5 +1,3 @@
-"""Security audit API routes."""
-
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
@@ -10,6 +8,7 @@ from app.features.security.schemas import (
     BatchRevokeRequest,
     BatchRevokeResponse,
     SecurityMode,
+    SecurityProviderFilter,
     SecurityPublicFileResponse,
     SecurityScanResponse,
 )
@@ -41,10 +40,17 @@ async def scan_security(
 )
 async def security_public_files(
     mode: SecurityMode = Query(default="sensitive"),
+    provider: SecurityProviderFilter = Query(default="all"),
     db: Session = Depends(get_db),
 ) -> DataEnvelope[list[SecurityPublicFileResponse]]:
-    data, scan_at = list_public_files(db, mode=mode)
-    return DataEnvelope(data=data, meta=EnvelopeMeta(scan_at=scan_at))
+    data, scan_at, coverage = list_public_files(db, mode=mode, provider=provider)
+    return DataEnvelope(
+        data=data,
+        meta=EnvelopeMeta(
+            scan_at=scan_at,
+            coverage=coverage.model_dump() if coverage is not None else None,
+        ),
+    )
 
 
 @router.post("/api/files/batch-revoke", response_model=DataEnvelope[BatchRevokeResponse])

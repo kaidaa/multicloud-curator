@@ -1,5 +1,3 @@
-"""Service layer for async operations."""
-
 from __future__ import annotations
 
 import logging
@@ -52,6 +50,21 @@ def get_status(db: Session, operation_id: str) -> OperationResponse:
     return to_operation_response(get_operation(db, operation_id))
 
 
+def _is_initial_load_context(
+    context: dict,
+    *,
+    account: Account,
+    previous_data_state: str | None,
+) -> bool:
+    triggered_by = context.get("triggered_by")
+    if triggered_by == "initial_load":
+        return True
+    if triggered_by in {"single_refresh", "refresh_all"}:
+        return False
+
+    return account.last_good_sync_at is None and previous_data_state != "Lengkap"
+
+
 def recover_orphan_operations(db: Session) -> int:
     """Mark active operations failed after backend restart and unstick accounts."""
     recovered = 0
@@ -68,7 +81,15 @@ def recover_orphan_operations(db: Session) -> int:
         if account is None or account.status != "syncing":
             continue
         previous_status = context.get("previous_status")
-        if previous_status and previous_status != "syncing":
+        previous_data_state = context.get("previous_data_state") or account.data_state
+        if _is_initial_load_context(
+            context,
+            account=account,
+            previous_data_state=previous_data_state,
+        ):
+            account.status = "load_failed"
+            account.data_state = previous_data_state
+        elif previous_status and previous_status != "syncing":
             account.status = previous_status
         elif account.last_good_sync_at is not None:
             account.status = "active"

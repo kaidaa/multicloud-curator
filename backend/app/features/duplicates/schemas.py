@@ -1,12 +1,10 @@
-"""Pydantic schemas for duplicate detection endpoints."""
-
 from __future__ import annotations
 
 from typing import Literal
 
 from pydantic import BaseModel
 
-from app.features.files_visibility.schemas import SearchTypeFilter
+from app.features.files_visibility.schemas import SearchProviderFilter, SearchTypeFilter
 
 
 class DuplicatesScanResponse(BaseModel):
@@ -30,7 +28,9 @@ class DuplicateMemberResponse(BaseModel):
     deletable: bool
     deletable_reason: str | None
     path: str | None
-    web_view_link: str | None
+    location_type: str | None
+    open_url: str | None
+    open_url_type: str | None
 
 
 class DuplicateGroupResponse(BaseModel):
@@ -63,4 +63,5 @@ class BatchDeleteResponse(BaseModel):
     failed: list[BatchDeleteFailureItem]
 
 
+DuplicateProviderFilter = SearchProviderFilter
 DuplicateTypeFilter = SearchTypeFilter

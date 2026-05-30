@@ -1,5 +1,3 @@
-"""Pydantic schemas for large/stale file endpoints."""
-
 from __future__ import annotations
 
 from typing import Literal
@@ -10,6 +8,8 @@ from app.features.files_visibility.schemas import ProviderName, SearchTypeFilter
 
 LargeStaleSort = Literal["size_desc", "size_asc", "modified_asc", "modified_desc"]
 LargeStaleTypeFilter = SearchTypeFilter
+LargeStaleProviderFilter = Literal["all", "google", "dropbox"]
+LargeStaleCategoryFilter = Literal["all", "large", "stale"]
 TriggerReason = Literal["large", "stale", "both"]
 
 
@@ -30,4 +30,12 @@ class LargeStaleFileResponse(BaseModel):
     deletable_reason: str | None
     trigger_reason: TriggerReason
     path: str | None
-    web_view_link: str | None
+    location_type: str | None
+    open_url: str | None
+    open_url_type: str | None
+
+
+class LargeStaleScanResponse(BaseModel):
+    operation_type: Literal["large_stale_scan"] = "large_stale_scan"
+    scan_at: str
+    total: int

@@ -1,5 +1,3 @@
-"""Persistence helpers for async operations."""
-
 from __future__ import annotations
 
 import json
@@ -36,11 +34,12 @@ def create_operation(
     *,
     operation_type: str,
     context: dict[str, Any] | None = None,
+    enforce_global_limit: bool = True,
 ) -> Operation:
     with _operation_lock:
         cleanup_old_operations(db)
         active = active_operations(db)
-        if len(active) >= _MAX_GLOBAL_ACTIVE:
+        if enforce_global_limit and len(active) >= _MAX_GLOBAL_ACTIVE:
             raise ServiceUnavailableError(
                 "Terlalu banyak operasi berjalan. Coba lagi nanti.",
                 details={"max_concurrent": _MAX_GLOBAL_ACTIVE},

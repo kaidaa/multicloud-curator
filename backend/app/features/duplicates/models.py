@@ -1,9 +1,6 @@
-"""Duplicate detection models.
+"""Duplicate group storage.
 
-duplicate_groups menyimpan header tiap grup (nama representatif, basis match,
-total size, jumlah anggota). duplicate_group_members memetakan file ke grup
-dengan cascade delete dari kedua sisi. ``match_basis`` adalah atribut internal
-('hash' atau 'name_size'), tidak ditampilkan ke pengguna di UI.
+``match_basis`` is internal metadata and is not shown directly in the UI.
 """
 
 from __future__ import annotations

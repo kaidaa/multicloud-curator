@@ -1,5 +1,3 @@
-"""Keyword management API routes."""
-
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response, status

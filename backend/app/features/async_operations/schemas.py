@@ -1,5 +1,3 @@
-"""Pydantic schemas for async operation endpoints."""
-
 from __future__ import annotations
 
 from typing import Literal

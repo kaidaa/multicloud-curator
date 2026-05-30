@@ -1,5 +1,3 @@
-"""Duplicate detection API routes."""
-
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
@@ -10,6 +8,7 @@ from app.features.duplicates.schemas import (
     BatchDeleteRequest,
     BatchDeleteResponse,
     DuplicateGroupResponse,
+    DuplicateProviderFilter,
     DuplicatesScanResponse,
     DuplicateTypeFilter,
 )
@@ -34,13 +33,15 @@ async def scan_duplicates(
 @router.get("/api/duplicates", response_model=DataEnvelope[list[DuplicateGroupResponse]])
 async def duplicates_list(
     file_type: DuplicateTypeFilter = Query(default="all", alias="type"),
+    provider: DuplicateProviderFilter = Query(default="all"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> DataEnvelope[list[DuplicateGroupResponse]]:
-    data, total, scan_at = list_duplicate_groups(
+    data, total, scan_at, coverage = list_duplicate_groups(
         db,
         file_type=file_type,
+        provider=provider,
         limit=limit,
         offset=offset,
     )
@@ -49,6 +50,7 @@ async def duplicates_list(
         meta=EnvelopeMeta(
             snapshot_at=None,
             scan_at=scan_at,
+            coverage=coverage.model_dump() if coverage is not None else None,
             pagination={"limit": limit, "offset": offset, "total": total},
         ),
     )

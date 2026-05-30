@@ -1,5 +1,3 @@
-"""Business logic for security audit and batch revoke."""
-
 from __future__ import annotations
 
 import json
@@ -18,6 +16,8 @@ from app.features.accounts.models import Account
 from app.features.async_operations import repository as ops_repo
 from app.features.files_visibility.models import File
 from app.features.files_visibility.service import derive_file_type, sanitize_display_path
+from app.features.scan_metadata import repository as scan_metadata_repo
+from app.features.scan_metadata.schemas import ScanCoverageResponse
 from app.features.security import repository
 from app.features.security.schemas import (
     BatchRevokeFailureItem,
@@ -130,29 +130,49 @@ def trigger_security_scan(
     )
 
 
+def run_security_scan(
+    db: Session,
+    *,
+    scanned_at: datetime,
+) -> tuple[int, ScanCoverageResponse]:
+    account_snapshot = scan_metadata_repo.snapshot_connected_accounts(
+        accounts_repo.list_accounts(db)
+    )
+    candidates = repository.list_scan_candidates(
+        db,
+        account_ids=account_snapshot.active_account_ids,
+    )
+    keywords = repository.list_active_keywords(db)
+    keyword_words = [keyword.word for keyword in keywords]
+    coverage = scan_metadata_repo.coverage_from_active_accounts(account_snapshot)
+    scan_results = build_security_scan_results(candidates, keyword_words)
+    repository.replace_security_scan_results(
+        db,
+        results=scan_results,
+        scanned_at=scanned_at,
+        coverage=coverage,
+    )
+    return len(candidates), coverage
+
+
 def execute_security_scan(operation_id: str) -> None:
     db = SessionLocal()
     try:
         operation = ops_repo.get_operation(db, operation_id)
         ops_repo.mark_running(db, operation, label="Membaca metadata publik lokal")
-        candidates = repository.list_scan_candidates(db)
-        keywords = repository.list_active_keywords(db)
-        keyword_words = [keyword.word for keyword in keywords]
         ops_repo.update_progress(
             db,
             operation,
             current=0,
-            total=len(candidates),
+            total=0,
             label="Mendeteksi keyword sensitif",
         )
-        scanned_at = ops_repo.utc_now()
-        scan_results = build_security_scan_results(candidates, keyword_words)
-        repository.replace_security_scan_results(db, results=scan_results, scanned_at=scanned_at)
+        candidates_count, _coverage = run_security_scan(db, scanned_at=ops_repo.utc_now())
         ops_repo.update_progress(
             db,
             operation,
-            current=len(candidates),
-            total=len(candidates),
+            current=candidates_count,
+            total=candidates_count,
             label="Scan keamanan selesai",
         )
         ops_repo.mark_completed(db, operation)
@@ -208,7 +228,9 @@ def _to_public_file_response(row: repository.SecurityPublicFileRow) -> SecurityP
         deletable=deletable,
         deletable_reason=reason,
         path=sanitize_display_path(provider=file.provider, path=file.path),
-        web_view_link=file.web_view_link,
+        location_type=file.location_type,
+        open_url=file.open_url,
+        open_url_type=file.open_url_type,
     )
 
 
@@ -216,9 +238,18 @@ def list_public_files(
     db: Session,
     *,
     mode: str,
-) -> tuple[list[SecurityPublicFileResponse], str | None]:
-    rows = repository.list_public_file_rows(db, sensitive_only=mode == "sensitive")
-    return [_to_public_file_response(row) for row in rows], _iso(repository.latest_security_scan_at(db))
+    provider: str = "all",
+) -> tuple[list[SecurityPublicFileResponse], str | None, ScanCoverageResponse | None]:
+    rows = repository.list_public_file_rows(
+        db,
+        sensitive_only=mode == "sensitive",
+        provider=provider,
+    )
+    return (
+        [_to_public_file_response(row) for row in rows],
+        _iso(repository.latest_security_scan_at(db)),
+        repository.latest_security_scan_coverage(db),
+    )
 
 
 def _failure(file_id: str, error_code: str, message: str) -> BatchRevokeFailureItem:

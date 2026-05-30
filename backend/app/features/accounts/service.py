@@ -1,5 +1,3 @@
-"""Business logic for account management and account refresh operations."""
-
 from __future__ import annotations
 
 import json
@@ -513,8 +511,7 @@ def execute_refresh_operation(operation_id: str, account_id: str) -> None:
             )
             raise exc
     except Exception:
-        # BackgroundTasks cannot surface errors to the user; the operation row
-        # already carries the safe error message for polling.
+        # BackgroundTasks cannot surface errors; callers poll the operation row.
         pass
     finally:
         db.close()

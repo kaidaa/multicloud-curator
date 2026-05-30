@@ -1,11 +1,6 @@
-"""Hasil scan keamanan (deteksi nama file mengandung keyword sensitif).
+"""Security scan results for sensitive file-name matches.
 
-``scan_type`` saat ini hanya 'security_audit'; field disiapkan untuk ekstensi
-ke tipe scan lain di masa depan. ``matched_keywords`` di-store sebagai JSON
-array string dan di-parse di service layer.
-
-Deteksi file besar/usang dijalankan on-demand di service tanpa persistensi,
-jadi tidak masuk tabel ini.
+``matched_keywords`` stores a JSON array parsed by the service layer.
 """
 
 from __future__ import annotations

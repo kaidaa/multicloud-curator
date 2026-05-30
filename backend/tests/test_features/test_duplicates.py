@@ -6,7 +6,9 @@ import pytest
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
+from app.features.accounts import service as accounts_service
 from app.features.accounts.models import Account
+from app.features.async_operations import repository as ops_repo
 from app.features.duplicates import repository as duplicates_repo
 from app.features.duplicates import service as duplicates_service
 from app.features.duplicates.models import DuplicateGroup, DuplicateGroupMember
@@ -14,6 +16,7 @@ from app.features.duplicates.service import (
     batch_delete_files,
     build_duplicate_groups,
     list_duplicate_groups,
+    run_duplicates_scan,
 )
 from app.features.files_visibility.models import File
 from app.shared.encryption import encrypt_token
@@ -66,7 +69,14 @@ def _file(
         owner_account=account.id,
         provider=provider or account.provider,
         sharing_status="private",
-        web_view_link="https://example.com/file",
+        location_type="MY_DRIVE" if (provider or account.provider) == "google" else None,
+        open_url="https://example.com/file",
+        open_url_type="google_web_view"
+        if (provider or account.provider) == "google"
+        else "dropbox_private_quickview",
+        has_public_shared_link=False,
+        shared_link_url=None,
+        shared_link_visibility=None,
         trashed=False,
         is_folder=False,
         is_owned=is_owned,
@@ -327,13 +337,13 @@ def test_list_duplicate_groups_maps_members_and_type_filter(db_session: Session)
         scanned_at=datetime(2026, 1, 3, 0, 0, 0),
     )
 
-    data, total, scan_at = list_duplicate_groups(
+    data, total, scan_at, coverage = list_duplicate_groups(
         db_session,
         file_type="document",
         limit=50,
         offset=0,
     )
-    empty, empty_total, _ = list_duplicate_groups(
+    empty, empty_total, _, _empty_coverage = list_duplicate_groups(
         db_session,
         file_type="photo",
         limit=50,
@@ -342,6 +352,7 @@ def test_list_duplicate_groups_maps_members_and_type_filter(db_session: Session)
 
     assert total == 1
     assert scan_at == "2026-01-03T00:00:00Z"
+    assert coverage is None
     assert data[0].match_basis == "name_size"
     assert data[0].members_count == 2
     assert {member.id for member in data[0].members} == {google_doc.id, dropbox_doc.id}
@@ -351,6 +362,226 @@ def test_list_duplicate_groups_maps_members_and_type_filter(db_session: Session)
     assert members_by_id[dropbox_doc.id].deletable_reason == "File ini bukan milik Anda"
     assert empty == []
     assert empty_total == 0
+
+
+def test_list_duplicate_groups_filters_provider_and_type(db_session: Session) -> None:
+    google, dropbox = _persist_accounts(db_session)
+    google_doc_a = _file(
+        account=google,
+        file_id="google-doc-a",
+        file_name="Google A.pdf",
+        size_bytes=100,
+        hash_value="google-doc",
+        mime_type="application/pdf",
+    )
+    google_doc_b = _file(
+        account=google,
+        file_id="google-doc-b",
+        file_name="Google B.pdf",
+        size_bytes=100,
+        hash_value="google-doc",
+        mime_type="application/pdf",
+    )
+    dropbox_doc_a = _file(
+        account=dropbox,
+        file_id="dropbox-doc-a",
+        file_name="Dropbox A.pdf",
+        size_bytes=100,
+        hash_value="dropbox-doc",
+        mime_type="application/pdf",
+    )
+    dropbox_doc_b = _file(
+        account=dropbox,
+        file_id="dropbox-doc-b",
+        file_name="Dropbox B.pdf",
+        size_bytes=100,
+        hash_value="dropbox-doc",
+        mime_type="application/pdf",
+    )
+    dropbox_photo_a = _file(
+        account=dropbox,
+        file_id="dropbox-photo-a",
+        file_name="Dropbox A.jpg",
+        size_bytes=100,
+        hash_value="dropbox-photo",
+        mime_type="image/jpeg",
+    )
+    dropbox_photo_b = _file(
+        account=dropbox,
+        file_id="dropbox-photo-b",
+        file_name="Dropbox B.jpg",
+        size_bytes=100,
+        hash_value="dropbox-photo",
+        mime_type="image/jpeg",
+    )
+    db_session.add_all(
+        [
+            google_doc_a,
+            google_doc_b,
+            dropbox_doc_a,
+            dropbox_doc_b,
+            dropbox_photo_a,
+            dropbox_photo_b,
+        ]
+    )
+    db_session.commit()
+    duplicates_repo.replace_duplicate_groups(
+        db_session,
+        groups=[
+            ("hash", [google_doc_a, google_doc_b]),
+            ("hash", [dropbox_doc_a, dropbox_doc_b]),
+            ("hash", [dropbox_photo_a, dropbox_photo_b]),
+        ],
+        scanned_at=datetime(2026, 1, 3, 0, 0, 0),
+    )
+
+    google_groups, google_total, _scan_at, _coverage = list_duplicate_groups(
+        db_session,
+        file_type="all",
+        provider="google",
+        limit=50,
+        offset=0,
+    )
+    dropbox_docs, dropbox_doc_total, _scan_at, _coverage = list_duplicate_groups(
+        db_session,
+        file_type="document",
+        provider="dropbox",
+        limit=50,
+        offset=0,
+    )
+
+    assert google_total == 1
+    assert {member.provider for member in google_groups[0].members} == {"google"}
+    assert dropbox_doc_total == 1
+    assert {member.id for member in dropbox_docs[0].members} == {
+        dropbox_doc_a.id,
+        dropbox_doc_b.id,
+    }
+
+
+def test_latest_scan_at_ignores_completed_operation_without_duplicate_groups(
+    db_session: Session,
+) -> None:
+    operation = ops_repo.create_operation(
+        db_session,
+        operation_type="duplicates_scan",
+        context={"triggered_by": "duplicates_scan"},
+    )
+    ops_repo.mark_completed(db_session, operation)
+
+    data, total, scan_at, coverage = list_duplicate_groups(
+        db_session,
+        file_type="all",
+        limit=50,
+        offset=0,
+    )
+
+    assert data == []
+    assert total == 0
+    assert scan_at is None
+    assert coverage is None
+
+
+def test_duplicate_scan_persists_snapshot_coverage(db_session: Session) -> None:
+    active = _account(
+        provider="google",
+        provider_account_id="active",
+        email="active@example.com",
+    )
+    loading = _account(
+        provider="dropbox",
+        provider_account_id="loading",
+        email="loading@example.com",
+        status="syncing",
+    )
+    db_session.add_all([active, loading])
+    db_session.commit()
+    db_session.refresh(active)
+    db_session.refresh(loading)
+    active_a = _file(
+        account=active,
+        file_id="active-a",
+        file_name="KTP.pdf",
+        size_bytes=100,
+        hash_value="same-hash",
+    )
+    active_b = _file(
+        account=active,
+        file_id="active-b",
+        file_name="KTP Copy.pdf",
+        size_bytes=100,
+        hash_value="same-hash",
+    )
+    loading_file = _file(
+        account=loading,
+        file_id="loading-a",
+        file_name="Loading.pdf",
+        size_bytes=100,
+        hash_value="same-hash",
+    )
+    db_session.add_all([active_a, active_b, loading_file])
+    db_session.commit()
+
+    _files_count, scan_coverage = run_duplicates_scan(
+        db_session,
+        scanned_at=datetime(2026, 1, 4, 0, 0, 0),
+    )
+    data, total, scan_at, stored_coverage = list_duplicate_groups(
+        db_session,
+        file_type="all",
+        limit=50,
+        offset=0,
+    )
+
+    assert total == 1
+    assert scan_at == "2026-01-04T00:00:00Z"
+    assert {member.account_id for member in data[0].members} == {active.id}
+    assert scan_coverage.eligible_account_count == 2
+    assert scan_coverage.covered_account_ids == [active.id]
+    assert scan_coverage.covered_account_count == 1
+    assert stored_coverage == scan_coverage
+
+
+def test_disconnect_account_cleans_orphan_duplicate_groups(
+    db_session: Session,
+) -> None:
+    google, dropbox = _persist_accounts(db_session)
+    google_doc = _file(
+        account=google,
+        file_id="google-doc",
+        file_name="KTP.pdf",
+        size_bytes=100,
+        hash_value="hash-1",
+    )
+    dropbox_doc = _file(
+        account=dropbox,
+        file_id="dropbox-doc",
+        file_name="KTP - Copy.pdf",
+        size_bytes=100,
+        hash_value=None,
+        is_owned=False,
+    )
+    db_session.add_all([google_doc, dropbox_doc])
+    db_session.commit()
+    db_session.refresh(google_doc)
+    db_session.refresh(dropbox_doc)
+    google_id = google.id
+    google_doc_id = google_doc.id
+    dropbox_doc_id = dropbox_doc.id
+    duplicates_repo.replace_duplicate_groups(
+        db_session,
+        groups=[("name_size", [google_doc, dropbox_doc])],
+        scanned_at=datetime(2026, 1, 3, 0, 0, 0),
+    )
+
+    accounts_service.disconnect_account(db_session, google_id)
+    db_session.expire_all()
+
+    assert db_session.query(Account).filter_by(id=google_id).count() == 0
+    assert db_session.query(File).filter_by(id=google_doc_id).count() == 0
+    assert db_session.query(File).filter_by(id=dropbox_doc_id).count() == 1
+    assert db_session.query(DuplicateGroup).count() == 0
+    assert db_session.query(DuplicateGroupMember).count() == 0
 
 
 def test_batch_delete_partial_success_and_group_cleanup(
@@ -409,6 +640,58 @@ def test_batch_delete_partial_success_and_group_cleanup(
     assert db_session.get(File, owned.id) is None
     assert db_session.query(DuplicateGroup).count() == 0
     assert db_session.query(DuplicateGroupMember).count() == 0
+
+
+def test_batch_delete_does_not_change_duplicate_scan_timestamp(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    google, _dropbox = _persist_accounts(db_session)
+    owned_a = _file(
+        account=google,
+        file_id="provider-owned-a",
+        file_name="Owned A.pdf",
+        size_bytes=100,
+        hash_value="same-hash",
+    )
+    owned_b = _file(
+        account=google,
+        file_id="provider-owned-b",
+        file_name="Owned B.pdf",
+        size_bytes=100,
+        hash_value="same-hash",
+    )
+    db_session.add_all([owned_a, owned_b])
+    db_session.commit()
+    db_session.refresh(owned_a)
+    db_session.refresh(owned_b)
+    run_duplicates_scan(
+        db_session,
+        scanned_at=datetime(2026, 1, 3, 0, 0, 0),
+    )
+
+    class FakeAdapter:
+        def delete_file(self, file_id: str) -> bool:
+            return True
+
+    monkeypatch.setattr(
+        duplicates_service,
+        "get_adapter",
+        lambda _provider, _credentials, _settings: FakeAdapter(),
+    )
+
+    batch_delete_files(db_session, ids=[owned_a.id])
+    data, total, scan_at, coverage = list_duplicate_groups(
+        db_session,
+        file_type="all",
+        limit=50,
+        offset=0,
+    )
+
+    assert data == []
+    assert total == 0
+    assert scan_at == "2026-01-03T00:00:00Z"
+    assert coverage is not None
 
 
 def test_batch_delete_validates_ids(db_session: Session) -> None:
