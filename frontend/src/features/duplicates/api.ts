@@ -1,5 +1,7 @@
 import { api } from "@/shared/api/client"
+import { parseScanCoverage, type ScanCoverage } from "@/shared/api/coverage"
 import { waitForOperation } from "@/shared/api/operations"
+import type { LocationType } from "@/shared/files/location"
 
 export type DuplicateTypeFilter =
   | "all"
@@ -10,6 +12,7 @@ export type DuplicateTypeFilter =
   | "other"
 
 export type Provider = "google" | "dropbox"
+export type DuplicateProviderFilter = "all" | Provider
 
 interface DuplicateMemberResponse {
   id: string
@@ -26,7 +29,9 @@ interface DuplicateMemberResponse {
   path: string | null
   mime_type: string | null
   type: string
-  web_view_link: string | null
+  location_type: LocationType | null
+  open_url: string | null
+  open_url_type: string | null
 }
 
 interface DuplicateGroupResponse {
@@ -76,7 +81,9 @@ export interface DuplicateMember {
   path: string | null
   mimeType: string | null
   type: string
-  webViewLink: string | null
+  locationType: LocationType | null
+  openUrl: string | null
+  openUrlType: string | null
 }
 
 export interface DuplicateGroup {
@@ -91,6 +98,7 @@ export interface ListDuplicateGroupsResult {
   groups: DuplicateGroup[]
   total: number
   scanAt: string | null
+  coverage: ScanCoverage | null
 }
 
 export interface BatchDeleteEntry {
@@ -121,7 +129,9 @@ function mapMember(raw: DuplicateMemberResponse): DuplicateMember {
     path: raw.path,
     mimeType: raw.mime_type,
     type: raw.type,
-    webViewLink: raw.web_view_link,
+    locationType: raw.location_type,
+    openUrl: raw.open_url,
+    openUrlType: raw.open_url_type,
   }
 }
 
@@ -137,6 +147,7 @@ function mapGroup(raw: DuplicateGroupResponse): DuplicateGroup {
 
 export interface ListDuplicatesParams {
   type?: DuplicateTypeFilter
+  provider?: DuplicateProviderFilter
   limit?: number
   offset?: number
 }
@@ -144,9 +155,9 @@ export interface ListDuplicatesParams {
 export async function listDuplicateGroups(
   params: ListDuplicatesParams = {},
 ): Promise<ListDuplicateGroupsResult> {
-  const { type = "all", limit = 50, offset = 0 } = params
+  const { type = "all", provider = "all", limit = 50, offset = 0 } = params
   const response = await api.get<DuplicateGroupResponse[]>("/duplicates", {
-    params: { type, limit, offset },
+    params: { type, provider, limit, offset },
   })
 
   return {
@@ -159,6 +170,7 @@ export async function listDuplicateGroups(
       typeof response.meta?.scan_at === "string"
         ? response.meta.scan_at
         : null,
+    coverage: parseScanCoverage(response.meta?.coverage),
   }
 }
 

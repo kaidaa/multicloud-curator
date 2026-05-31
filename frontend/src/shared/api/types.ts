@@ -1,9 +1,3 @@
-/**
- * Shared API contract types yang dipakai lintas fitur. Tipe spesifik per
- * endpoint tinggal di folder fitur masing-masing dan extend dari sini bila
- * butuh envelope.
- */
-
 export interface EnvelopeMeta {
   snapshot_at?: string
   pagination?: {

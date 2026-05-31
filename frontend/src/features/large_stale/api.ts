@@ -1,4 +1,6 @@
 import { api } from "@/shared/api/client"
+import { parseScanCoverage, type ScanCoverage } from "@/shared/api/coverage"
+import type { LocationType } from "@/shared/files/location"
 
 export type LargeStaleTypeFilter =
   | "all"
@@ -15,6 +17,8 @@ export type LargeStaleSort =
   | "modified_desc"
 
 export type Provider = "google" | "dropbox"
+export type LargeStaleProviderFilter = "all" | Provider
+export type LargeStaleCategoryFilter = "all" | "large" | "stale"
 
 export type TriggerReason = "large" | "stale" | "both"
 
@@ -40,7 +44,9 @@ interface LargeStaleFileResponse {
   deletable_reason: string | null
   trigger_reason: TriggerReason
   path: string | null
-  web_view_link: string | null
+  location_type: LocationType | null
+  open_url: string | null
+  open_url_type: string | null
 }
 
 interface BatchDeleteSuccessResponse {
@@ -60,6 +66,12 @@ interface BatchDeleteResponse {
   failed: BatchDeleteFailureResponse[]
 }
 
+interface LargeStaleScanResponse {
+  operation_type: "large_stale_scan"
+  scan_at: string
+  total: number
+}
+
 export interface LargeStaleFile {
   id: string
   fileId: string
@@ -77,7 +89,9 @@ export interface LargeStaleFile {
   deletableReason: string | null
   triggerReason: TriggerReason
   path: string | null
-  webViewLink: string | null
+  locationType: LocationType | null
+  openUrl: string | null
+  openUrlType: string | null
 }
 
 export interface ListLargeStaleResult {
@@ -85,6 +99,7 @@ export interface ListLargeStaleResult {
   total: number
   snapshotAt: string | null
   thresholds: LargeStaleThresholds
+  coverage: ScanCoverage | null
 }
 
 export interface BatchDeleteEntry {
@@ -117,7 +132,9 @@ function mapFile(raw: LargeStaleFileResponse): LargeStaleFile {
     deletableReason: raw.deletable_reason,
     triggerReason: raw.trigger_reason,
     path: raw.path,
-    webViewLink: raw.web_view_link,
+    locationType: raw.location_type,
+    openUrl: raw.open_url,
+    openUrlType: raw.open_url_type,
   }
 }
 
@@ -138,6 +155,8 @@ function parseThresholds(value: unknown): LargeStaleThresholds {
 
 export interface ListLargeStaleParams {
   type?: LargeStaleTypeFilter
+  provider?: LargeStaleProviderFilter
+  category?: LargeStaleCategoryFilter
   sort?: LargeStaleSort
   limit?: number
   offset?: number
@@ -146,9 +165,16 @@ export interface ListLargeStaleParams {
 export async function listLargeStaleFiles(
   params: ListLargeStaleParams = {},
 ): Promise<ListLargeStaleResult> {
-  const { type = "all", sort = "size_desc", limit = 50, offset = 0 } = params
+  const {
+    type = "all",
+    provider = "all",
+    category = "all",
+    sort = "size_desc",
+    limit = 50,
+    offset = 0,
+  } = params
   const response = await api.get<LargeStaleFileResponse[]>("/files/large-stale", {
-    params: { type, sort, limit, offset },
+    params: { type, provider, category, sort, limit, offset },
   })
   const pagination = response.meta?.pagination
 
@@ -159,11 +185,18 @@ export async function listLargeStaleFiles(
         ? pagination.total
         : response.data.length,
     snapshotAt:
-      typeof response.meta?.snapshot_at === "string"
-        ? response.meta.snapshot_at
-        : null,
+      typeof response.meta?.scan_at === "string"
+        ? response.meta.scan_at
+        : typeof response.meta?.snapshot_at === "string"
+          ? response.meta.snapshot_at
+          : null,
     thresholds: parseThresholds(response.meta?.thresholds),
+    coverage: parseScanCoverage(response.meta?.coverage),
   }
+}
+
+export async function scanLargeStaleFiles(): Promise<void> {
+  await api.post<LargeStaleScanResponse>("/scan/large-stale")
 }
 
 export async function batchDeleteFiles(ids: string[]): Promise<BatchDeleteResult> {

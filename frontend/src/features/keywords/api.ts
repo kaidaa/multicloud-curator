@@ -1,16 +1,14 @@
-import { simulateDelay } from "@/shared/api/mocks/accounts"
-import {
-  applyMockAddKeyword,
-  applyMockDeleteKeyword,
-  applyMockToggleKeyword,
-  getMockKeywords,
-  KeywordValidationError,
-  type KeywordResponse,
-} from "@/shared/api/mocks/keywords"
-
-export { KeywordValidationError }
+import { api } from "@/shared/api/client"
 
 export type KeywordCategory = "default" | "custom"
+
+interface KeywordResponse {
+  id: string
+  word: string
+  category: KeywordCategory
+  active: boolean
+  created_at: string
+}
 
 export interface Keyword {
   id: string
@@ -30,28 +28,21 @@ function mapKeyword(raw: KeywordResponse): Keyword {
   }
 }
 
-// M4: replace dengan `api.get<KeywordResponse[]>('/keywords')`.
 export async function listKeywords(): Promise<Keyword[]> {
-  await simulateDelay(400)
-  return getMockKeywords().map(mapKeyword)
+  const response = await api.get<KeywordResponse[]>("/keywords")
+  return response.data.map(mapKeyword)
 }
 
-// M4: replace dengan `api.post('/keywords', { word })`. Validation di backend
-// match logika di mock (min 2 char, max 100, unique case-insensitive).
 export async function addKeyword(word: string): Promise<Keyword> {
-  await simulateDelay(400)
-  return mapKeyword(applyMockAddKeyword(word))
+  const response = await api.post<KeywordResponse>("/keywords", { word })
+  return mapKeyword(response.data)
 }
 
-// M4: replace dengan `api.patch('/keywords/{id}/toggle')`.
 export async function toggleKeyword(id: string): Promise<Keyword> {
-  await simulateDelay(300)
-  return mapKeyword(applyMockToggleKeyword(id))
+  const response = await api.patch<KeywordResponse>(`/keywords/${id}/toggle`)
+  return mapKeyword(response.data)
 }
 
-// M4: replace dengan `api.delete('/keywords/{id}')`. Backend tolak default
-// dengan ValidationError.
 export async function deleteKeyword(id: string): Promise<void> {
-  await simulateDelay(400)
-  applyMockDeleteKeyword(id)
+  await api.delete<null>(`/keywords/${id}`)
 }

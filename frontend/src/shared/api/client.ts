@@ -1,9 +1,3 @@
-/**
- * Typed fetch wrapper. Semua request lewat `/api/*` yang di-proxy Vite dev
- * server ke backend FastAPI di port 8000. Mapping error code spesifik
- * ditambah saat error envelope di-finalize.
- */
-
 import type { ApiErrorPayload, ApiResponse } from "@/shared/api/types"
 
 const BASE_URL = "/api"

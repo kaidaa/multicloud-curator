@@ -1,4 +1,5 @@
 import { api } from "@/shared/api/client"
+import type { LocationType } from "@/shared/files/location"
 
 export type Provider = "google" | "dropbox"
 
@@ -15,7 +16,9 @@ export interface FileResponse {
   provider: Provider
   is_owned: boolean
   path: string | null
-  web_view_link: string | null
+  location_type: LocationType | null
+  open_url: string | null
+  open_url_type: string | null
 }
 
 interface QuotaAccountResponse {
@@ -45,7 +48,9 @@ export interface ActivityFile {
   provider: Provider
   isOwned: boolean
   path: string | null
-  webViewLink: string | null
+  locationType: LocationType | null
+  openUrl: string | null
+  openUrlType: string | null
 }
 
 export interface QuotaAccount {
@@ -76,7 +81,9 @@ export function mapFileResponse(raw: FileResponse): ActivityFile {
     provider: raw.provider,
     isOwned: raw.is_owned,
     path: raw.path,
-    webViewLink: raw.web_view_link,
+    locationType: raw.location_type,
+    openUrl: raw.open_url,
+    openUrlType: raw.open_url_type,
   }
 }
 

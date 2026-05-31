@@ -2,12 +2,11 @@ import { ApiClientError } from "@/shared/api/client"
 
 export { ApiClientError } from "@/shared/api/client"
 
-// Map error code dari Interface Contract ke pesan Bahasa Indonesia yang
-// user-friendly. Saat M3/M4 ditambah code lain sesuai backend response real.
+// User-facing copy for backend error codes.
 const ERROR_MESSAGES: Record<string, string> = {
   validation_error: "Permintaan tidak valid. Coba lagi atau periksa input.",
   account_token_invalid:
-    "Token akun sudah tidak berlaku. Silakan otorisasi ulang.",
+    "Akses akun perlu diperbarui. Silakan otorisasi ulang.",
   operation_in_progress:
     "Operasi sebelumnya masih berjalan. Tunggu hingga selesai.",
   provider_unavailable:
