@@ -175,8 +175,7 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
     await apiConnectAccount(provider)
   }, [])
 
-  // Refresh memakai overlay operation agar akun queued tetap terlihat memuat
-  // meskipun database belum menulis status syncing.
+  // Track refresh operations before the database status flips to syncing.
   const refreshAccount = useCallback(async (accountId: string) => {
     const controller = new AbortController()
     pendingControllers.current.add(controller)

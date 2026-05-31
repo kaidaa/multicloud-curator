@@ -23,37 +23,55 @@ interface StatusMeta {
 
 const STATUS_META: Record<AccountStatus, StatusMeta> = {
   active: { variant: "success", label: "Aktif" },
-  never_synced: { variant: "warning", label: "Belum disinkronisasi" },
-  syncing: { variant: "warning", label: "Memuat metadata" },
-  token_invalid: { variant: "danger", label: "Token kadaluwarsa" },
-  revoked: { variant: "danger", label: "Otorisasi dicabut" },
+  never_synced: { variant: "warning", label: "Memuat data" },
+  syncing: { variant: "warning", label: "Memuat data" },
+  token_invalid: { variant: "danger", label: "Perlu otorisasi ulang" },
+  revoked: { variant: "danger", label: "Akses dicabut" },
+  load_failed: { variant: "danger", label: "Gagal memuat" },
 }
 
 interface AccountRowProps {
   account: Account
+  isLoading?: boolean
   onRefresh: (accountId: string) => Promise<void>
+  onRetryLoad: (accountId: string) => Promise<void>
   onReauthorize: (accountId: string) => Promise<void>
   onDisconnect: (accountId: string) => void
 }
 
 export function AccountRow({
   account,
+  isLoading = false,
   onRefresh,
+  onRetryLoad,
   onReauthorize,
   onDisconnect,
 }: AccountRowProps) {
-  const [busyAction, setBusyAction] = useState<"refresh" | "reauthorize" | null>(null)
-  const statusMeta = STATUS_META[account.status]
-  const isSyncing = account.status === "syncing"
+  const [busyAction, setBusyAction] = useState<"refresh" | "retry" | "reauthorize" | null>(null)
+  const statusMeta = isLoading
+    ? STATUS_META.syncing
+    : STATUS_META[account.status]
+  const isSyncing = isLoading || account.status === "syncing"
   const needsReauth =
-    account.status === "token_invalid" || account.status === "revoked"
-  const canRefresh = account.status === "active" || account.status === "never_synced"
+    !isLoading && (account.status === "token_invalid" || account.status === "revoked")
+  const canRefresh = !isLoading && account.status === "active"
+  const canRetryLoad = !isLoading && account.status === "load_failed"
 
   async function handleRefresh() {
     if (busyAction) return
     setBusyAction("refresh")
     try {
       await onRefresh(account.id)
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  async function handleRetryLoad() {
+    if (busyAction) return
+    setBusyAction("retry")
+    try {
+      await onRetryLoad(account.id)
     } finally {
       setBusyAction(null)
     }
@@ -136,14 +154,29 @@ export function AccountRow({
               ) : (
                 <ArrowsClockwise size={13} weight="bold" />
               )}
-              <span>Refresh</span>
+              <span>Perbarui</span>
+            </button>
+          )}
+          {canRetryLoad && (
+            <button
+              type="button"
+              onClick={handleRetryLoad}
+              disabled={busyAction !== null}
+              className="inline-flex items-center gap-1 rounded-[--radius-sm] bg-primary px-2.5 py-1 text-xs font-medium text-white transition hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busyAction === "retry" ? (
+                <CircleNotch size={13} className="animate-spin" weight="bold" />
+              ) : (
+                <ArrowsClockwise size={13} weight="bold" />
+              )}
+              <span>Coba lagi</span>
             </button>
           )}
           <button
             type="button"
             onClick={() => onDisconnect(account.id)}
             disabled={busyAction !== null}
-            className="inline-flex items-center gap-1 rounded-[--radius-sm] px-2.5 py-1 text-xs font-medium text-danger-strong transition hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-1 rounded-[--radius-sm] border border-danger-strong/30 px-2.5 py-1 text-xs font-medium text-danger-strong transition hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Plugs size={13} weight="bold" />
             <span>Putus koneksi</span>

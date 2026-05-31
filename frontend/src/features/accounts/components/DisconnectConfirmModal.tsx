@@ -42,7 +42,7 @@ export function DisconnectConfirmModal({
       open={account !== null}
       onClose={handleClose}
       title="Putus koneksi akun?"
-      description="Metadata file dan hasil scan dari akun ini akan dihapus dari sistem lokal. File asli di penyedia penyimpanan tidak terpengaruh."
+      description="Informasi file dan hasil scan dari akun ini akan dihapus dari sistem lokal. File asli di penyedia penyimpanan tidak terpengaruh."
       size="sm"
       busy={busy}
       footer={

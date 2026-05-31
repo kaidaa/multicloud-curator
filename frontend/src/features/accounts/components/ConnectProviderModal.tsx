@@ -17,8 +17,8 @@ interface ConnectProviderModalProps {
 const PROVIDERS: Provider[] = ["google", "dropbox"]
 
 const PROVIDER_DESCRIPTION: Record<Provider, string> = {
-  google: "Baca metadata file dan kuota akun Google Drive.",
-  dropbox: "Baca metadata file dan kuota akun Dropbox.",
+  google: "Baca informasi file dan kuota akun Google Drive.",
+  dropbox: "Baca informasi file dan kuota akun Dropbox.",
 }
 
 export function ConnectProviderModal({
@@ -49,6 +49,7 @@ export function ConnectProviderModal({
       onClose={handleClose}
       title="Tambah akun"
       description="Pilih penyedia penyimpanan untuk melanjutkan alur otorisasi."
+      size="sm"
       busy={pending !== null}
     >
       {pending ? (
@@ -59,7 +60,7 @@ export function ConnectProviderModal({
               Menghubungkan {getProviderLabel(pending)}
             </p>
             <p className="mt-1 text-xs text-muted">
-              Simulasi alur OAuth dan callback berhasil.
+              Mengarahkan ke halaman otorisasi provider.
             </p>
           </div>
         </div>

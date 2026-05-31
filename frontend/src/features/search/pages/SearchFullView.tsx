@@ -21,6 +21,11 @@ import { useSearch } from "@/features/search/hooks/useSearch"
 import { SearchFilters } from "@/features/search/components/SearchFilters"
 import { Skeleton } from "@/shared/components/LoadingState"
 import { FileIcon } from "@/shared/components/FileIcon"
+import { formatFileLocation } from "@/shared/files/location"
+import {
+  OPEN_FILE_UNAVAILABLE_MESSAGE,
+  openInProvider,
+} from "@/shared/files/openFile"
 import { formatRelativeTime } from "@/shared/utils/formatTime"
 
 function parseProvider(value: string | null): SearchProviderFilter {
@@ -91,8 +96,7 @@ export function SearchFullView() {
   function updateParam(updater: (next: URLSearchParams) => void) {
     const next = new URLSearchParams(searchParams)
     updater(next)
-    // Reset offset saat filter/query berubah supaya pagination tidak terjebak
-    // di halaman yang tidak relevan.
+    // Changing filters invalidates the current page offset.
     next.delete("offset")
     setSearchParams(next, { replace: true })
   }
@@ -147,10 +151,20 @@ export function SearchFullView() {
     setSearchParams(next, { replace: true })
   }
 
+  function handleResetFilters() {
+    const next = new URLSearchParams(searchParams)
+    next.delete("owned_only")
+    next.delete("provider")
+    next.delete("type")
+    next.delete("offset")
+    setSearchParams(next, { replace: true })
+  }
+
   const currentPageStart = total === 0 ? 0 : offset + 1
   const currentPageEnd = Math.min(offset + limit, total)
   const hasPrev = offset > 0
   const hasNext = offset + limit < total
+  const hasActiveFilters = ownedOnly || provider !== "all" || fileType !== "all"
 
   return (
     <>
@@ -164,7 +178,7 @@ export function SearchFullView() {
           <span>Kembali ke Eksplorasi</span>
         </button>
         <span className="text-[11px] uppercase tracking-[0.18em] text-muted-2">
-          Pencarian metadata
+          Pencarian file
         </span>
       </header>
 
@@ -174,7 +188,7 @@ export function SearchFullView() {
           type="text"
           value={query}
           onChange={(event) => handleQueryChange(event.target.value)}
-          placeholder="Cari metadata file (min. 2 karakter)"
+          placeholder="Cari nama atau informasi file (min. 2 karakter)"
           className="min-h-[28px] flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
         />
       </div>
@@ -207,7 +221,16 @@ export function SearchFullView() {
           <SearchResultsSkeleton />
         ) : files.length === 0 ? (
           <div className="rounded-[--radius] border border-line bg-panel px-5 py-8 text-center text-sm text-muted">
-            Tidak ada hasil untuk pencarian ini. Coba kata kunci atau filter yang berbeda.
+            <p>Tidak ada hasil untuk pencarian ini. Coba kata kunci atau filter yang berbeda.</p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="mt-3 inline-flex items-center gap-2 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft"
+              >
+                Reset filter
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -216,7 +239,7 @@ export function SearchFullView() {
                 <select
                   value={limit}
                   onChange={(event) => handleLimitChange(Number(event.target.value))}
-                  className="rounded-[--radius-sm] border border-line bg-panel px-2 py-1 text-xs text-ink-soft transition hover:border-line-strong focus:border-line-strong focus:outline-none"
+                  className="rounded-[--radius-sm] border border-line bg-bg px-2 py-1 text-xs text-ink-soft transition hover:border-line-strong focus:border-line-strong focus:outline-none"
                   aria-label="Jumlah hasil per halaman"
                 >
                   {SEARCH_PAGE_SIZE_OPTIONS.map((option) => (
@@ -268,8 +291,8 @@ function SearchResultsTable({ files }: { files: ActivityFile[] }) {
           <thead className="border-b border-line">
             <tr>
               <th className={`${TABLE_HEAD_CLASS} w-[38%] text-left`}>Nama file</th>
-              <th className={`${TABLE_HEAD_CLASS} w-[24%] text-left`}>Akun + provider</th>
-              <th className={`${TABLE_HEAD_CLASS} w-[20%] text-left`}>Path</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[24%] text-left`}>Akun</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[20%] text-left`}>Lokasi</th>
               <th className={`${TABLE_HEAD_CLASS} w-[12%] text-left`}>Modifikasi</th>
               <th className={`${TABLE_HEAD_CLASS} w-[96px] text-right`}>Aksi</th>
             </tr>
@@ -290,7 +313,7 @@ function SearchResultsTable({ files }: { files: ActivityFile[] }) {
                   <p className="text-xs text-muted">{getProviderLabel(file.provider)}</p>
                 </td>
                 <td className="truncate px-4 py-3 text-xs text-muted">
-                  {file.path ?? "-"}
+                  {formatFileLocation(file.path, file.locationType)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-soft">
                   {formatRelativeTime(file.modifiedAt)}
@@ -299,12 +322,14 @@ function SearchResultsTable({ files }: { files: ActivityFile[] }) {
                   <div className="flex justify-end">
                     <button
                       type="button"
-                      onClick={() => {
-                        if (file.webViewLink) {
-                          window.open(file.webViewLink, "_blank", "noopener,noreferrer")
-                        }
-                      }}
-                      disabled={!file.webViewLink}
+                      onClick={() => openInProvider(file.openUrl)}
+                      disabled={!file.openUrl}
+                      title={!file.openUrl ? OPEN_FILE_UNAVAILABLE_MESSAGE : undefined}
+                      aria-label={
+                        file.openUrl
+                          ? `Buka ${file.name}`
+                          : `${file.name}: ${OPEN_FILE_UNAVAILABLE_MESSAGE}`
+                      }
                       className="inline-flex max-w-full items-center gap-1 rounded-[--radius-sm] border border-line bg-panel px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <ArrowSquareOut size={13} weight="bold" />
@@ -329,8 +354,8 @@ function SearchResultsSkeleton() {
           <thead className="border-b border-line">
             <tr>
               <th className={`${TABLE_HEAD_CLASS} w-[38%] text-left`}>Nama file</th>
-              <th className={`${TABLE_HEAD_CLASS} w-[24%] text-left`}>Akun + provider</th>
-              <th className={`${TABLE_HEAD_CLASS} w-[20%] text-left`}>Path</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[24%] text-left`}>Akun</th>
+              <th className={`${TABLE_HEAD_CLASS} w-[20%] text-left`}>Lokasi</th>
               <th className={`${TABLE_HEAD_CLASS} w-[12%] text-left`}>Modifikasi</th>
               <th className={`${TABLE_HEAD_CLASS} w-[96px] text-right`}>Aksi</th>
             </tr>

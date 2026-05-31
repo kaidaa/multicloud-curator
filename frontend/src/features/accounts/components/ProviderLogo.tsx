@@ -5,8 +5,7 @@ interface ProviderLogoProps {
   size?: "sm" | "md"
 }
 
-// Tailwind theme tidak include warna brand provider; pakai inline color
-// karena hanya muncul di dua komponen dan tidak masuk design system token.
+// Keep provider colors local; they are too narrow for design tokens.
 const PROVIDER_STYLE: Record<Provider, { bg: string; text: string; label: string; letter: string }> = {
   google: {
     bg: "bg-primary-soft",

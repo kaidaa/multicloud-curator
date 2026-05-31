@@ -5,7 +5,7 @@ import { Skeleton } from "@/shared/components/LoadingState"
 interface SecurityTableProps {
   files: SecurityFile[]
   selectedFileIds: ReadonlySet<string>
-  onToggleSelection: (fileId: string) => void
+  onToggleSelection: (id: string) => void
 }
 
 const TABLE_HEAD_CLASS =
@@ -21,7 +21,7 @@ function SecurityTableHead() {
         <th className={`${TABLE_HEAD_CLASS} text-left`}>Nama file</th>
         <th className={`${TABLE_HEAD_CLASS} text-left`}>Lokasi</th>
         <th className={`${TABLE_HEAD_CLASS} text-left`}>Keyword cocok</th>
-        <th className={`${TABLE_HEAD_CLASS} text-left`}>Dimodifikasi</th>
+        <th className={`${TABLE_HEAD_CLASS} text-left`}>Modifikasi Terakhir</th>
         <th className={`${TABLE_HEAD_CLASS} text-right`}>Aksi</th>
       </tr>
     </thead>
@@ -43,7 +43,7 @@ export function SecurityTable({
               <SecurityRow
                 key={file.id}
                 file={file}
-                isSelected={selectedFileIds.has(file.fileId)}
+                isSelected={selectedFileIds.has(file.id)}
                 onToggleSelection={onToggleSelection}
               />
             ))}
