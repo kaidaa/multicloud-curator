@@ -8,6 +8,7 @@ import {
 } from "react"
 
 import type {
+  LargeStaleCategoryFilter,
   LargeStaleProviderFilter,
   LargeStaleSort,
   LargeStaleTypeFilter,
@@ -18,6 +19,8 @@ interface LargeStaleUiStateValue {
   setTypeFilter: (value: LargeStaleTypeFilter) => void
   providerFilter: LargeStaleProviderFilter
   setProviderFilter: (value: LargeStaleProviderFilter) => void
+  categoryFilter: LargeStaleCategoryFilter
+  setCategoryFilter: (value: LargeStaleCategoryFilter) => void
   sortBy: LargeStaleSort
   setSortBy: (value: LargeStaleSort) => void
   selectedFileIds: ReadonlySet<string>
@@ -32,12 +35,11 @@ const LargeStaleUiStateContext = createContext<LargeStaleUiStateValue | undefine
   undefined,
 )
 
-// Provider mount di AppLayout supaya filter / sort / selection survive
-// route change (FPS §4.1). State data fetch (files, thresholds, snapshot)
-// tetap lokal di LargeStalePage — re-fetch otomatis saat page mount lagi.
+// AppLayout owns UI state; page data stays local and refetches on remount.
 export function LargeStaleUiStateProvider({ children }: { children: ReactNode }) {
   const [typeFilter, setTypeFilter] = useState<LargeStaleTypeFilter>("all")
   const [providerFilter, setProviderFilter] = useState<LargeStaleProviderFilter>("all")
+  const [categoryFilter, setCategoryFilter] = useState<LargeStaleCategoryFilter>("all")
   const [sortBy, setSortBy] = useState<LargeStaleSort>("size_desc")
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
   const [hasRequestedScan, setHasRequestedScan] = useState(false)
@@ -74,6 +76,8 @@ export function LargeStaleUiStateProvider({ children }: { children: ReactNode })
       setTypeFilter,
       providerFilter,
       setProviderFilter,
+      categoryFilter,
+      setCategoryFilter,
       sortBy,
       setSortBy,
       selectedFileIds,
@@ -86,6 +90,7 @@ export function LargeStaleUiStateProvider({ children }: { children: ReactNode })
     [
       typeFilter,
       providerFilter,
+      categoryFilter,
       sortBy,
       selectedFileIds,
       hasRequestedScan,

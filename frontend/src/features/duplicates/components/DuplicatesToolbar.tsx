@@ -1,13 +1,18 @@
 import { ArrowsClockwise, CircleNotch, Trash } from "@phosphor-icons/react"
 
-import type { DuplicateTypeFilter } from "@/features/duplicates/api"
-import { FilterChip } from "@/shared/components/FilterChip"
+import type {
+  DuplicateProviderFilter,
+  DuplicateTypeFilter,
+} from "@/features/duplicates/api"
 import { formatBytes } from "@/shared/utils/formatSize"
 
 interface DuplicatesToolbarProps {
   typeFilter: DuplicateTypeFilter
   onTypeFilterChange: (value: DuplicateTypeFilter) => void
+  providerFilter: DuplicateProviderFilter
+  onProviderFilterChange: (value: DuplicateProviderFilter) => void
   isScanning: boolean
+  scanLabel: string
   onScanClick: () => void
   selectedCount: number
   selectedTotalSize: number
@@ -23,10 +28,19 @@ const TYPE_OPTIONS: Array<{ value: DuplicateTypeFilter; label: string }> = [
   { value: "other", label: "Lainnya" },
 ]
 
+const PROVIDER_OPTIONS: Array<{ value: DuplicateProviderFilter; label: string }> = [
+  { value: "all", label: "Semua" },
+  { value: "google", label: "Google Drive" },
+  { value: "dropbox", label: "Dropbox" },
+]
+
 export function DuplicatesToolbar({
   typeFilter,
   onTypeFilterChange,
+  providerFilter,
+  onProviderFilterChange,
   isScanning,
+  scanLabel,
   onScanClick,
   selectedCount,
   selectedTotalSize,
@@ -39,27 +53,49 @@ export function DuplicatesToolbar({
           type="button"
           onClick={onScanClick}
           disabled={isScanning}
-          className="inline-flex items-center gap-2 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-[--radius-sm] bg-primary px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isScanning ? (
-            <CircleNotch size={14} className="animate-spin" weight="bold" />
+            <CircleNotch size={15} className="animate-spin" weight="bold" />
           ) : (
-            <ArrowsClockwise size={14} weight="bold" />
+            <ArrowsClockwise size={15} weight="bold" />
           )}
-          <span>Scan ulang</span>
+          <span>{scanLabel}</span>
         </button>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {TYPE_OPTIONS.map((opt) => (
-            <FilterChip
-              key={opt.value}
-              active={typeFilter === opt.value}
-              onClick={() => onTypeFilterChange(opt.value)}
-            >
-              {opt.label}
-            </FilterChip>
-          ))}
-        </div>
+        <label className="inline-flex items-center gap-2 text-xs text-muted">
+          <span className="font-medium text-muted">Provider</span>
+          <select
+            value={providerFilter}
+            onChange={(event) =>
+              onProviderFilterChange(event.target.value as DuplicateProviderFilter)
+            }
+            className="rounded-[--radius-sm] border border-line bg-bg px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-line-strong focus:border-line-strong focus:outline-none"
+          >
+            {PROVIDER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="inline-flex items-center gap-2 text-xs text-muted">
+          <span className="font-medium text-muted">Tipe file</span>
+          <select
+            value={typeFilter}
+            onChange={(event) =>
+              onTypeFilterChange(event.target.value as DuplicateTypeFilter)
+            }
+            className="rounded-[--radius-sm] border border-line bg-bg px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-line-strong focus:border-line-strong focus:outline-none"
+          >
+            {TYPE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="flex items-center gap-3">
@@ -75,9 +111,9 @@ export function DuplicatesToolbar({
           type="button"
           onClick={onDeleteClick}
           disabled={selectedCount === 0}
-          className="inline-flex items-center gap-1.5 rounded-[--radius-sm] bg-danger px-3 py-1.5 text-xs font-medium text-white transition hover:bg-danger-strong disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-[--radius-sm] bg-danger px-3.5 py-2 text-sm font-medium text-white transition hover:bg-danger-strong disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Trash size={14} weight="bold" />
+          <Trash size={15} weight="bold" />
           <span>Hapus terpilih</span>
         </button>
       </div>

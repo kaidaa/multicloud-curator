@@ -5,6 +5,7 @@ import {
   listLargeStaleFiles,
   scanLargeStaleFiles,
   type BatchDeleteResult,
+  type LargeStaleCategoryFilter,
   type LargeStaleFile,
   type LargeStaleProviderFilter,
   type LargeStaleSort,
@@ -18,6 +19,7 @@ import { getErrorMessage } from "@/shared/api/errors"
 interface UseLargeStaleOptions {
   typeFilter: LargeStaleTypeFilter
   providerFilter: LargeStaleProviderFilter
+  categoryFilter: LargeStaleCategoryFilter
   sortBy: LargeStaleSort
   limit?: number
   offset?: number
@@ -45,6 +47,7 @@ const INITIAL_THRESHOLDS: LargeStaleThresholds = {
 export function useLargeStale({
   typeFilter,
   providerFilter,
+  categoryFilter,
   sortBy,
   limit = 50,
   offset = 0,
@@ -69,6 +72,7 @@ export function useLargeStale({
   const fetchFiles = useCallback(
     async (
       type: LargeStaleTypeFilter,
+      category: LargeStaleCategoryFilter,
       sort: LargeStaleSort,
       pageOffset: number,
     ): Promise<ListLargeStaleResult | null> => {
@@ -78,6 +82,7 @@ export function useLargeStale({
         const result = await listLargeStaleFiles({
           type,
           provider: providerFilter,
+          category,
           sort,
           limit,
           offset: pageOffset,
@@ -111,6 +116,7 @@ export function useLargeStale({
     listLargeStaleFiles({
       type: typeFilter,
       provider: providerFilter,
+      category: categoryFilter,
       sort: sortBy,
       limit,
       offset,
@@ -130,25 +136,25 @@ export function useLargeStale({
     return () => {
       cancelled = true
     }
-  }, [applyResult, enabled, typeFilter, providerFilter, sortBy, limit, offset])
+  }, [applyResult, enabled, typeFilter, providerFilter, categoryFilter, sortBy, limit, offset])
 
   const refetch = useCallback(async () => {
-    await fetchFiles(typeFilter, sortBy, offset)
-  }, [fetchFiles, typeFilter, sortBy, offset])
+    await fetchFiles(typeFilter, categoryFilter, sortBy, offset)
+  }, [fetchFiles, typeFilter, categoryFilter, sortBy, offset])
 
-  // "Scan ulang" menulis ulang hasil Large-Stale tersimpan, lalu membaca snapshot terbaru.
+  // Rescan overwrites stored results, then reads the latest snapshot.
   const refresh = useCallback(async (): Promise<ListLargeStaleResult | null> => {
     await scanLargeStaleFiles()
-    return fetchFiles(typeFilter, sortBy, offset)
-  }, [fetchFiles, typeFilter, sortBy, offset])
+    return fetchFiles(typeFilter, categoryFilter, sortBy, offset)
+  }, [fetchFiles, typeFilter, categoryFilter, sortBy, offset])
 
   const batchDelete = useCallback(
     async (ids: string[]): Promise<BatchDeleteResult> => {
       const result = await batchDeleteFiles(ids)
-      await fetchFiles(typeFilter, sortBy, offset)
+      await fetchFiles(typeFilter, categoryFilter, sortBy, offset)
       return result
     },
-    [fetchFiles, typeFilter, sortBy, offset],
+    [fetchFiles, typeFilter, categoryFilter, sortBy, offset],
   )
 
   return {

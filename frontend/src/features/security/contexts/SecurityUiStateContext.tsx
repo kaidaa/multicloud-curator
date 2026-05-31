@@ -7,33 +7,41 @@ import {
   type ReactNode,
 } from "react"
 
-import type { SecurityMode } from "@/features/security/api"
+import type { SecurityMode, SecurityProviderFilter } from "@/features/security/api"
 
 interface SecurityUiStateValue {
   mode: SecurityMode
   setMode: (value: SecurityMode) => void
+  providerFilter: SecurityProviderFilter
+  setProviderFilter: (value: SecurityProviderFilter) => void
   selectedFileIds: ReadonlySet<string>
-  toggleSelection: (fileId: string) => void
+  hasRequestedScan: boolean
+  markScanRequested: () => void
+  toggleSelection: (id: string) => void
   clearSelection: () => void
-  removeFromSelection: (fileIds: string[]) => void
+  removeFromSelection: (ids: string[]) => void
 }
 
 const SecurityUiStateContext = createContext<SecurityUiStateValue | undefined>(
   undefined,
 )
 
-// Provider mount di AppLayout supaya mode + selection survive route change
-// (FPS §4.1). State fetch (files, scanAt, isLoading) tetap lokal di
-// SecurityPage — re-fetch otomatis saat page mount lagi.
+// AppLayout owns UI state; page data stays local and refetches on remount.
 export function SecurityUiStateProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<SecurityMode>("sensitive")
+  const [providerFilter, setProviderFilter] = useState<SecurityProviderFilter>("all")
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
+  const [hasRequestedScan, setHasRequestedScan] = useState(false)
 
-  const toggleSelection = useCallback((fileId: string) => {
+  const markScanRequested = useCallback(() => {
+    setHasRequestedScan(true)
+  }, [])
+
+  const toggleSelection = useCallback((id: string) => {
     setSelectedFileIds((prev) => {
       const next = new Set(prev)
-      if (next.has(fileId)) next.delete(fileId)
-      else next.add(fileId)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }, [])
@@ -42,11 +50,11 @@ export function SecurityUiStateProvider({ children }: { children: ReactNode }) {
     setSelectedFileIds(new Set())
   }, [])
 
-  const removeFromSelection = useCallback((fileIds: string[]) => {
-    if (fileIds.length === 0) return
+  const removeFromSelection = useCallback((ids: string[]) => {
+    if (ids.length === 0) return
     setSelectedFileIds((prev) => {
       const next = new Set(prev)
-      for (const id of fileIds) next.delete(id)
+      for (const id of ids) next.delete(id)
       return next
     })
   }, [])
@@ -55,12 +63,25 @@ export function SecurityUiStateProvider({ children }: { children: ReactNode }) {
     () => ({
       mode,
       setMode,
+      providerFilter,
+      setProviderFilter,
       selectedFileIds,
+      hasRequestedScan,
+      markScanRequested,
       toggleSelection,
       clearSelection,
       removeFromSelection,
     }),
-    [mode, selectedFileIds, toggleSelection, clearSelection, removeFromSelection],
+    [
+      mode,
+      providerFilter,
+      selectedFileIds,
+      hasRequestedScan,
+      markScanRequested,
+      toggleSelection,
+      clearSelection,
+      removeFromSelection,
+    ],
   )
 
   return (

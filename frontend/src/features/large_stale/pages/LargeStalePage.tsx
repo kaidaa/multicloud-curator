@@ -22,7 +22,7 @@ import {
 } from "@/shared/utils/scanCoverage"
 
 const LARGE_STALE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
-const DEFAULT_LARGE_STALE_PAGE_SIZE = 50
+const DEFAULT_LARGE_STALE_PAGE_SIZE = 10
 
 export function LargeStalePage() {
   const {
@@ -30,6 +30,8 @@ export function LargeStalePage() {
     setTypeFilter,
     providerFilter,
     setProviderFilter,
+    categoryFilter,
+    setCategoryFilter,
     sortBy,
     setSortBy,
     selectedFileIds,
@@ -47,6 +49,7 @@ export function LargeStalePage() {
     useLargeStale({
       typeFilter,
       providerFilter,
+      categoryFilter,
       sortBy,
       limit: pageSize,
       offset,
@@ -79,8 +82,7 @@ export function LargeStalePage() {
     clearSelection()
   }, [clearSelection, hasActiveAccounts, snapshotAt])
 
-  // Overlay status akun terkini hanya boleh menambah disable state; backend
-  // `deletable=false` tetap menang.
+  // Latest account status may only add disabled state; backend deletability wins.
   const accountStatusMap = useMemo(() => {
     const map = new Map<string, Account["status"]>()
     for (const account of accounts) {
@@ -116,7 +118,7 @@ export function LargeStalePage() {
     [files, accountStatusMap],
   )
 
-  // Total size dari seluruh kandidat (untuk meta header).
+  // Aggregate the current page size for the meta header.
   const totalSize = useMemo(
     () => effectiveFiles.reduce((sum, f) => sum + f.sizeBytes, 0),
     [effectiveFiles],
@@ -160,6 +162,12 @@ export function LargeStalePage() {
     clearSelection()
     setOffset(0)
     setProviderFilter(value)
+  }
+
+  function handleCategoryFilterChange(value: typeof categoryFilter) {
+    clearSelection()
+    setOffset(0)
+    setCategoryFilter(value)
   }
 
   function handleSortChange(value: typeof sortBy) {
@@ -230,7 +238,8 @@ export function LargeStalePage() {
   const hasAccounts = accounts.length > 0
   const hasStoredScan = snapshotAt !== null
   const hasData = hasStoredScan && effectiveFiles.length > 0
-  const filterActive = typeFilter !== "all" || providerFilter !== "all"
+  const filterActive =
+    typeFilter !== "all" || providerFilter !== "all" || categoryFilter !== "all"
   const showCoverageRatio = shouldShowCoverageRatio(coverage)
   const hasCoverageNudge = hasNewActiveAccountsOutsideCoverage(coverage, accounts)
 
@@ -240,7 +249,7 @@ export function LargeStalePage() {
         <p className="text-[11px] uppercase tracking-[0.18em] text-muted-2">Kelola File</p>
         <h1 className="mt-2 text-2xl font-semibold text-ink">File Besar dan Usang</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          Kandidat pembersihan berdasarkan ukuran besar atau usia lama. Hanya file milik Anda yang dapat dihapus.
+          Menandai file milik Anda yang memakai lebih dari 0,5% kuota akun ATAU tidak berubah selama 12 bulan.
         </p>
         {hasAccounts && hasStoredScan && (
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-2">
@@ -359,6 +368,8 @@ export function LargeStalePage() {
               onTypeFilterChange={handleTypeFilterChange}
               providerFilter={providerFilter}
               onProviderFilterChange={handleProviderFilterChange}
+              categoryFilter={categoryFilter}
+              onCategoryFilterChange={handleCategoryFilterChange}
               sortBy={sortBy}
               onSortChange={handleSortChange}
               isRefreshing={isRefreshing}
@@ -398,6 +409,7 @@ export function LargeStalePage() {
                       onClick={() => {
                         handleTypeFilterChange("all")
                         handleProviderFilterChange("all")
+                        handleCategoryFilterChange("all")
                       }}
                       className="inline-flex items-center gap-2 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft"
                     >

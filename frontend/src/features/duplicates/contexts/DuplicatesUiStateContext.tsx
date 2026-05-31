@@ -7,12 +7,19 @@ import {
   type ReactNode,
 } from "react"
 
-import type { DuplicateTypeFilter } from "@/features/duplicates/api"
+import type {
+  DuplicateProviderFilter,
+  DuplicateTypeFilter,
+} from "@/features/duplicates/api"
 
 interface DuplicatesUiStateValue {
   typeFilter: DuplicateTypeFilter
   setTypeFilter: (value: DuplicateTypeFilter) => void
+  providerFilter: DuplicateProviderFilter
+  setProviderFilter: (value: DuplicateProviderFilter) => void
   selectedFileIds: ReadonlySet<string>
+  hasRequestedScan: boolean
+  markScanRequested: () => void
   toggleSelection: (id: string) => void
   clearSelection: () => void
   removeFromSelection: (ids: string[]) => void
@@ -25,13 +32,17 @@ const DuplicatesUiStateContext = createContext<DuplicatesUiStateValue | undefine
   undefined,
 )
 
-// Provider mounted di AppLayout supaya selection / open accordion / type
-// filter survive route change (FPS §4.1: state pengelolaan persist saat
-// user pindah halaman dan kembali).
+// AppLayout owns this so filters, selection, and expanded groups survive route changes.
 export function DuplicatesUiStateProvider({ children }: { children: ReactNode }) {
   const [typeFilter, setTypeFilter] = useState<DuplicateTypeFilter>("all")
+  const [providerFilter, setProviderFilter] = useState<DuplicateProviderFilter>("all")
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
   const [openGroupIds, setOpenGroupIds] = useState<Set<string>>(new Set())
+  const [hasRequestedScan, setHasRequestedScan] = useState(false)
+
+  const markScanRequested = useCallback(() => {
+    setHasRequestedScan(true)
+  }, [])
 
   const toggleSelection = useCallback((id: string) => {
     setSelectedFileIds((prev) => {
@@ -72,7 +83,11 @@ export function DuplicatesUiStateProvider({ children }: { children: ReactNode })
     () => ({
       typeFilter,
       setTypeFilter,
+      providerFilter,
+      setProviderFilter,
       selectedFileIds,
+      hasRequestedScan,
+      markScanRequested,
       toggleSelection,
       clearSelection,
       removeFromSelection,
@@ -82,7 +97,10 @@ export function DuplicatesUiStateProvider({ children }: { children: ReactNode })
     }),
     [
       typeFilter,
+      providerFilter,
       selectedFileIds,
+      hasRequestedScan,
+      markScanRequested,
       toggleSelection,
       clearSelection,
       removeFromSelection,

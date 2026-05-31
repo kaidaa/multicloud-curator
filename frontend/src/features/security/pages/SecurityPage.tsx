@@ -23,7 +23,7 @@ import {
 } from "@/shared/utils/scanCoverage"
 
 const SECURITY_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
-const DEFAULT_SECURITY_PAGE_SIZE = 50
+const DEFAULT_SECURITY_PAGE_SIZE = 10
 
 export function SecurityPage() {
   const {
@@ -63,8 +63,7 @@ export function SecurityPage() {
     clearSelection()
   }, [clearSelection, hasActiveAccounts])
 
-  // Overlay status akun terkini hanya boleh menambah disable state; backend
-  // `deletable=false` tetap menang.
+  // Latest account status may only add disabled state; backend deletability wins.
   const accountStatusMap = useMemo(() => {
     const map = new Map<string, Account["status"]>()
     for (const account of accounts) {
@@ -101,7 +100,7 @@ export function SecurityPage() {
     [files, accountStatusMap],
   )
 
-  // Lookup map untuk modal target dari selection.
+  // Resolve selected ids to modal targets.
   const fileIndex = useMemo(() => {
     const map = new Map<string, SecurityFile>()
     for (const file of effectiveFiles) {
@@ -304,19 +303,21 @@ export function SecurityPage() {
         </div>
       ) : (
         <>
-          <div className="mt-6">
-            <SecurityToolbar
-              mode={mode}
-              onModeChange={handleModeChange}
-              providerFilter={providerFilter}
-              onProviderFilterChange={handleProviderFilterChange}
-              isScanning={isScanning}
-              scanLabel={hasStoredScan ? "Scan ulang" : "Mulai scan"}
-              onScanClick={() => void handleScanClick()}
-              selectedCount={selectedCount}
-              onRevokeClick={() => setIsRevokeModalOpen(true)}
-            />
-          </div>
+          {(hasStoredScan || isLoading || isScanning) && (
+            <div className="mt-6">
+              <SecurityToolbar
+                mode={mode}
+                onModeChange={handleModeChange}
+                providerFilter={providerFilter}
+                onProviderFilterChange={handleProviderFilterChange}
+                isScanning={isScanning}
+                scanLabel={hasStoredScan ? "Scan ulang" : "Mulai scan"}
+                onScanClick={() => void handleScanClick()}
+                selectedCount={selectedCount}
+                onRevokeClick={() => setIsRevokeModalOpen(true)}
+              />
+            </div>
+          )}
 
           {hasStoredScan && mode === "public" && (
             <p className="mt-3 text-xs text-muted">
@@ -362,6 +363,17 @@ export function SecurityPage() {
                   icon={<ShieldCheck size={28} weight="duotone" />}
                   title="Belum ada audit keamanan"
                   description="Jalankan scan untuk memeriksa file publik di akun Anda."
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => void handleScanClick()}
+                      disabled={isScanning}
+                      className="inline-flex items-center gap-2 rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <MagnifyingGlass size={16} weight="bold" />
+                      <span>Mulai scan</span>
+                    </button>
+                  }
                 />
               ) : mode === "sensitive" ? (
                 <EmptyState

@@ -36,6 +36,8 @@ export function DuplicatesPage() {
   const {
     typeFilter,
     setTypeFilter,
+    providerFilter,
+    setProviderFilter,
     selectedFileIds,
     toggleSelection,
     clearSelection,
@@ -58,6 +60,7 @@ export function DuplicatesPage() {
   const { groups, total, scanAt, coverage, isLoading, error, refetch, scan, batchDelete } =
     useDuplicates({
       typeFilter,
+      providerFilter,
       limit: pageSize,
       offset,
       enabled: hasActiveAccounts,
@@ -82,12 +85,8 @@ export function DuplicatesPage() {
     clearSelection()
   }, [clearSelection, hasActiveAccounts])
 
-  // Status akun bersifat dinamis (user bisa reauthorize kapan saja),
-  // sedangkan field `deletable`/`deletableReason` di mock adalah snapshot
-  // saat scan terakhir. Derive ulang per member supaya row actionability
-  // sinkron dengan AccountsContext tanpa perlu re-scan. Healthy strict =
-  // "active" saja (per FPS). Kasus shared (is_owned=false) dipertahankan
-  // permanen non-deletable.
+  // Account status can change after a scan; recompute actionability from
+  // AccountsContext while keeping shared files permanently non-deletable.
   const accountStatusMap = useMemo(() => {
     const map = new Map<string, Account["status"]>()
     for (const account of accounts) {
@@ -123,7 +122,7 @@ export function DuplicatesPage() {
     [effectiveGroups],
   )
 
-  // Lookup map untuk hitung total size selection lintas grup tanpa O(n²).
+  // Avoid rescanning every group when resolving selected members.
   const memberIndex = useMemo(() => {
     const map = new Map<string, DuplicateMember>()
     for (const group of effectiveGroups) {
@@ -155,8 +154,15 @@ export function DuplicatesPage() {
   const hasNextPage = offset + pageSize < total
 
   function handleTypeFilterChange(value: typeof typeFilter) {
+    clearSelection()
     setOffset(0)
     setTypeFilter(value)
+  }
+
+  function handleProviderFilterChange(value: typeof providerFilter) {
+    clearSelection()
+    setOffset(0)
+    setProviderFilter(value)
   }
 
   function handlePageOffset(nextOffset: number) {
@@ -309,6 +315,8 @@ export function DuplicatesPage() {
           <DuplicatesToolbar
             typeFilter={typeFilter}
             onTypeFilterChange={handleTypeFilterChange}
+            providerFilter={providerFilter}
+            onProviderFilterChange={handleProviderFilterChange}
             isScanning={isScanning}
             scanLabel={hasStoredScan ? "Scan ulang" : "Mulai scan"}
             onScanClick={() => void handleScanClick()}
@@ -348,21 +356,22 @@ export function DuplicatesPage() {
           </div>
         ) : effectiveGroups.length === 0 ? (
           hasStoredScan ? (
-            // Empty post-scan. Bedakan: kalau filter aktif (bukan "all") berarti
-            // tidak ada match untuk filter ini; selain itu memang scan tidak
-            // menemukan duplikat sama sekali.
-            typeFilter !== "all" ? (
+            // Distinguish an empty filter result from a clean scan.
+            typeFilter !== "all" || providerFilter !== "all" ? (
               <EmptyState
                 icon={<Funnel size={28} weight="duotone" />}
                 title="Tidak ada grup untuk filter ini"
-                description={`Belum ada duplikat dengan tipe yang dipilih. Reset filter atau ganti tipe untuk melihat hasil lain.`}
+                description="Belum ada duplikat dengan filter yang dipilih. Reset filter atau ganti pilihan untuk melihat hasil lain."
                 action={
                   <button
                     type="button"
-                    onClick={() => handleTypeFilterChange("all")}
+                    onClick={() => {
+                      handleProviderFilterChange("all")
+                      handleTypeFilterChange("all")
+                    }}
                     className="inline-flex items-center gap-2 rounded-[--radius-sm] border border-line bg-panel px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-panel-soft"
                   >
-                    Tampilkan semua tipe
+                    Tampilkan semua grup
                   </button>
                 }
               />
