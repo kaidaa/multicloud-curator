@@ -13,9 +13,7 @@ import {
 } from "@phosphor-icons/react"
 
 interface FileIconProps {
-  // Backend bisa kirim extension di field `type` (mis. "xlsx") atau mime di
-  // `mime_type`. Helper menerima dua-duanya, ekstensi diutamakan karena lebih
-  // ringkas dan match dengan icon set Phosphor.
+  // Prefer extension hints over MIME types because they map better to icons.
   type?: string | null
   mimeType?: string | null
   size?: number

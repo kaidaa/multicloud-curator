@@ -35,9 +35,7 @@ export function SearchDrawer({ open, onClose }: SearchDrawerProps) {
   const [fileType, setFileType] = useState<SearchTypeFilter>("all")
   const [sort, setSort] = useState<SearchSort>("modified_desc")
 
-  // Reset state setiap drawer dibuka dari awal supaya tidak membawa
-  // sisa query lama. Visual sengaja jangan persist — drawer adalah ephemeral
-  // preview, persistensi ada di /cari (URL state).
+  // The drawer is ephemeral; the full search page persists state in the URL.
   useEffect(() => {
     if (open) {
       setQuery("")
@@ -48,7 +46,7 @@ export function SearchDrawer({ open, onClose }: SearchDrawerProps) {
     }
   }, [open])
 
-  // Auto-focus input + lock body scroll + ESC close.
+  // Focus the input, lock body scroll, and close on Escape.
   useEffect(() => {
     if (!open) return
     const focusHandle = window.setTimeout(() => {
@@ -105,7 +103,7 @@ export function SearchDrawer({ open, onClose }: SearchDrawerProps) {
       <section
         role="dialog"
         aria-modal="true"
-        aria-label="Pencarian metadata"
+        aria-label="Pencarian file"
         onClick={(event) => event.stopPropagation()}
         className="fixed left-1/2 top-7 w-[min(820px,calc(100vw-2.25rem))] max-h-[calc(100vh-3.5rem)] -translate-x-1/2 overflow-auto rounded-[16px] border border-line bg-bg pb-[18px] pl-[18px] pr-[18px] pt-11 shadow-soft"
       >
@@ -125,7 +123,7 @@ export function SearchDrawer({ open, onClose }: SearchDrawerProps) {
             type="text"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Cari metadata file lintas Google Drive dan Dropbox (min. 2 karakter)"
+            placeholder="Cari nama atau informasi file lintas Google Drive dan Dropbox (min. 2 karakter)"
             className="min-h-[28px] flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
           />
         </div>
@@ -145,9 +143,15 @@ export function SearchDrawer({ open, onClose }: SearchDrawerProps) {
 
         <div className="mt-4">
           {isBelowMinLength ? (
-            <p className="rounded-[--radius-sm] bg-panel-soft px-4 py-3 text-xs text-muted">
-              Ketik minimal 2 karakter untuk mulai mencari.
-            </p>
+            <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-8 text-center">
+              <MagnifyingGlass size={24} weight="duotone" className="mb-3 text-muted-2" />
+              <p className="text-sm font-medium text-ink-soft">
+                Ketik minimal 2 karakter untuk mulai mencari.
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                Hasil pencarian akan muncul di sini.
+              </p>
+            </div>
           ) : error ? (
             <div className="flex items-start gap-2 rounded-[--radius-sm] border border-danger-strong/30 bg-danger-soft px-4 py-3 text-sm text-danger-strong">
               <WarningCircle size={16} weight="fill" className="mt-0.5 flex-shrink-0" />
@@ -160,7 +164,7 @@ export function SearchDrawer({ open, onClose }: SearchDrawerProps) {
               ))}
             </div>
           ) : files.length === 0 ? (
-            <p className="rounded-[--radius-sm] bg-panel-soft px-4 py-3 text-sm text-muted">
+            <p className="rounded-[--radius-sm] border border-line bg-bg px-4 py-3 text-sm text-muted">
               Tidak ada hasil untuk pencarian ini.
             </p>
           ) : (

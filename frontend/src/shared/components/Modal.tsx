@@ -9,11 +9,9 @@ interface ModalProps {
   description?: string
   children: ReactNode
   footer?: ReactNode
-  // Modal destructive (konfirmasi delete/disconnect) pakai size sm,
-  // modal informasi (provider chooser) pakai size md.
+  // Destructive confirmations use sm; information modals use md.
   size?: "sm" | "md"
-  // Saat busy (mid-async action), backdrop click dan tombol close di-disable
-  // supaya user tidak menutup modal di tengah operasi yang sedang berjalan.
+  // Busy modals stay open while the async action is in flight.
   busy?: boolean
 }
 

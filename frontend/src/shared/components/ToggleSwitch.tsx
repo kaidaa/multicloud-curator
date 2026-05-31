@@ -5,8 +5,6 @@ interface ToggleSwitchProps {
   "aria-label"?: string
 }
 
-// Toggle switch ringan untuk pengaturan boolean. Pill rounded + knob putih
-// dengan transisi. Pakai token primary untuk on state, line-strong saat off.
 export function ToggleSwitch({
   checked,
   onChange,

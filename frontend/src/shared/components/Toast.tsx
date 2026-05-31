@@ -5,7 +5,7 @@ import { useToast, type ToastVariant } from "@/shared/hooks/useToast"
 const VARIANT_CLASSES: Record<ToastVariant, string> = {
   success: "border-success-strong/30 bg-success-soft text-success-strong",
   error: "border-danger-strong/30 bg-danger-soft text-danger-strong",
-  info: "border-line-strong bg-panel text-ink-soft",
+  info: "border-primary-strong/30 bg-primary-soft text-primary-strong",
 }
 
 function ToastIcon({ variant }: { variant: ToastVariant }) {

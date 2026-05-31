@@ -7,8 +7,6 @@ interface FilterChipProps {
   disabled?: boolean
 }
 
-// Pill button untuk filter group. Inactive = panel-soft + ink-soft;
-// Active = primary-soft + primary-strong dengan border yang lebih tegas.
 export function FilterChip({ active, onClick, children, disabled = false }: FilterChipProps) {
   const baseClass =
     "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50"

@@ -3,8 +3,7 @@ import { formatBytes } from "@/shared/utils/formatSize"
 interface QuotaBarProps {
   usedBytes: number
   totalBytes: number
-  // Tampilkan label "12,4 / 16 GB" di atas bar. Off saat bar dipakai
-  // sebagai indikator visual saja (misal di kompak row table).
+  // Hide the text label when the bar is only a compact visual indicator.
   showLabel?: boolean
 }
 
@@ -13,8 +12,7 @@ export function QuotaBar({ usedBytes, totalBytes, showLabel = true }: QuotaBarPr
   const ratio = safeTotal === 0 ? 0 : Math.min(usedBytes / safeTotal, 1)
   const percent = Math.round(ratio * 100)
 
-  // Bar berubah warna saat mendekati penuh supaya user dapat sinyal kapasitas
-  // tanpa harus membaca persentase.
+  // Color warns about capacity pressure even when the percentage is skipped.
   const barColor =
     ratio >= 0.9
       ? "bg-danger"

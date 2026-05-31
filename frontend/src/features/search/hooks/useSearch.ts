@@ -71,9 +71,7 @@ export function useSearch(params: SearchParams): UseSearchResult {
     return () => {
       controller.abort()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- nilai dependent
-    // sengaja di-spread supaya filter berubah trigger fetch ulang. params.query
-    // diganti dengan debouncedQuery via `trimmed`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- params are expanded intentionally; query uses debounced `trimmed`.
   }, [
     trimmed,
     isBelowMinLength,

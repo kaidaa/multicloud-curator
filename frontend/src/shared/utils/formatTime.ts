@@ -4,8 +4,7 @@ const ABSOLUTE_FORMATTER = new Intl.DateTimeFormat("id-ID", {
   year: "numeric",
 })
 
-// Output bahasa Indonesia: "baru saja", "5 menit lalu", "3 hari lalu", lalu
-// fallback ke tanggal absolut saat lebih dari seminggu supaya tidak ambigu.
+// Keep recent timestamps relative, then fall back to absolute dates.
 export function formatRelativeTime(iso: string | null | undefined): string {
   if (!iso) return "—"
   const date = new Date(iso)

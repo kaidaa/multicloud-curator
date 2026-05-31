@@ -21,7 +21,7 @@ function ActivityTableHead() {
       <tr>
         <th className={`${TABLE_HEAD_CLASS} text-left`}>Nama berkas</th>
         <th className={`${TABLE_HEAD_CLASS} text-left`}>Lokasi</th>
-        <th className={`${TABLE_HEAD_CLASS} text-left`}>Dimodifikasi</th>
+        <th className={`${TABLE_HEAD_CLASS} text-left`}>Modifikasi Terakhir</th>
         <th className={`${TABLE_HEAD_CLASS} text-right`}>Aksi</th>
       </tr>
     </thead>
@@ -79,7 +79,7 @@ export function ActivityList({ files, isLoading, error, onRetry }: ActivityListP
       <EmptyState
         icon={<ClockCounterClockwise size={28} weight="duotone" />}
         title="Belum ada aktivitas"
-        description="Setelah akun di-refresh, file terbaru lintas akun akan muncul di sini."
+        description="Setelah daftar file diperbarui, file terbaru lintas akun akan muncul di sini."
       />
     )
   }

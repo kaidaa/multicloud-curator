@@ -7,8 +7,7 @@ import { formatBytes } from "@/shared/utils/formatSize"
 interface QuotaHeroCardProps {
   accounts: Account[]
   quotaSummary?: QuotaSummary | null
-  // Akun yang status-nya bermasalah ditampilkan sebagai catatan: angka kuota
-  // di hero card mencerminkan sinkronisasi terakhir, bukan kondisi real-time.
+  // Problem-account quotas reflect the last sync, not provider real-time state.
   problemAccounts: Account[]
 }
 

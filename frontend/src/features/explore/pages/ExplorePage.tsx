@@ -37,9 +37,7 @@ export function ExplorePage() {
   const snapshotAt =
     activity.snapshotAt ?? quota.snapshotAt ?? accountsApi.snapshotAt
   const overviewLayoutClass =
-    accountsApi.accounts.length >= 3
-      ? "lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] lg:items-stretch"
-      : "grid-cols-1"
+    "lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] lg:items-stretch"
 
   if (isInitialAccountsLoading) {
     return (

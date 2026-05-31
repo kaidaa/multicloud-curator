@@ -2,10 +2,11 @@ import { useMemo, useState, type FormEvent } from "react"
 import { Plus } from "@phosphor-icons/react"
 import { Link } from "react-router-dom"
 
-import { KeywordValidationError, type Keyword } from "@/features/keywords/api"
+import type { Keyword } from "@/features/keywords/api"
 import { KeywordRow } from "@/features/keywords/components/KeywordRow"
 import { Skeleton } from "@/shared/components/LoadingState"
 import { useKeywords } from "@/features/keywords/hooks/useKeywords"
+import { ApiClientError } from "@/shared/api/client"
 import { useToast } from "@/shared/hooks/useToast"
 
 export function KeywordsPage() {
@@ -17,12 +18,12 @@ export function KeywordsPage() {
   const [isAdding, setIsAdding] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const defaultKeywords = useMemo(
-    () => keywords.filter((kw) => kw.category === "default"),
-    [keywords],
-  )
-  const customKeywords = useMemo(
-    () => keywords.filter((kw) => kw.category === "custom"),
+  const sortedKeywords = useMemo(
+    () =>
+      [...keywords].sort((a, b) => {
+        if (a.category === b.category) return 0
+        return a.category === "default" ? -1 : 1
+      }),
     [keywords],
   )
 
@@ -44,7 +45,7 @@ export function KeywordsPage() {
       setNewKeywordInput("")
       pushToast(`Keyword "${created.word}" ditambahkan.`, "success")
     } catch (err) {
-      if (err instanceof KeywordValidationError) {
+      if (err instanceof ApiClientError && err.code === "validation_error") {
         setAddError(err.message)
       } else {
         pushToast(
@@ -69,7 +70,7 @@ export function KeywordsPage() {
   }
 
   function handleAskDelete(id: string) {
-    // Cuma 1 pending pada satu waktu — klik "Hapus" row lain reset pending.
+    // Only one row can be pending deletion at a time.
     setPendingDeleteId(id)
   }
 
@@ -195,29 +196,7 @@ export function KeywordsPage() {
             </button>
           </div>
         ) : (
-          <div className="space-y-6">
-            {defaultKeywords.length > 0 && (
-              <div>
-                <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-2">
-                  Keyword Default
-                </h2>
-                {renderTable(defaultKeywords)}
-              </div>
-            )}
-
-            <div>
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-2">
-                Keyword Kustom
-              </h2>
-              {customKeywords.length > 0 ? (
-                renderTable(customKeywords)
-              ) : (
-                <div className="rounded-[--radius-sm] border border-dashed border-line bg-panel-soft/40 px-4 py-6 text-center text-sm text-muted">
-                  Belum ada keyword kustom. Tambahkan di atas untuk memperluas deteksi.
-                </div>
-              )}
-            </div>
-          </div>
+          renderTable(sortedKeywords)
         )}
       </section>
 

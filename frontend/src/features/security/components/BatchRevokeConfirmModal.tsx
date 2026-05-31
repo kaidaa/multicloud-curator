@@ -11,10 +11,7 @@ interface BatchRevokeConfirmModalProps {
   onCancel: () => void
 }
 
-// Pola sejajar BatchDeleteConfirmModal Feature 4/5 dengan teks disesuaikan
-// untuk revoke action (bukan delete). Standalone untuk strict no-touch
-// boundary; promote ke shared `BatchActionConfirmModal` generic di planned
-// refactor setelah Feature 6 (rule of three terpenuhi).
+// Keep separate until a shared batch-action modal is justified.
 export function BatchRevokeConfirmModal({
   open,
   files,

@@ -63,14 +63,13 @@ export function useKeywords(): UseKeywordsResult {
   }, [refetch])
 
   const toggle = useCallback(async (id: string) => {
-    // Optimistic update untuk feel responsive — visual toggle berubah segera.
+    // Apply the toggle immediately, then revert on failure.
     setKeywords((prev) =>
       prev.map((kw) => (kw.id === id ? { ...kw, active: !kw.active } : kw)),
     )
     try {
       await toggleKeyword(id)
     } catch (err) {
-      // Rollback on error.
       setKeywords((prev) =>
         prev.map((kw) => (kw.id === id ? { ...kw, active: !kw.active } : kw)),
       )

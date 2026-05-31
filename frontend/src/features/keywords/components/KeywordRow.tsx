@@ -71,7 +71,7 @@ export function KeywordRow({
           <button
             type="button"
             onClick={() => onAskDelete(keyword.id)}
-            className="inline-flex items-center gap-1 rounded-[--radius-sm] px-2.5 py-1 text-xs font-medium text-danger-strong transition hover:bg-danger-soft"
+            className="inline-flex items-center gap-1 rounded-[--radius-sm] border border-danger-strong/30 px-2.5 py-1 text-xs font-medium text-danger-strong transition hover:bg-danger-soft"
           >
             Hapus
           </button>

@@ -55,12 +55,12 @@ function FilterDropdown<T extends string>({
   onChange,
 }: FilterDropdownProps<T>) {
   return (
-    <label className="inline-flex items-center gap-2 text-xs text-muted">
-      <span className="font-medium uppercase tracking-[0.14em] text-muted-2">{label}</span>
+    <label className="block min-w-0 text-xs text-muted">
+      <span className="mb-1 block font-medium text-muted">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as T)}
-        className="rounded-[--radius-sm] border border-line bg-panel px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-line-strong focus:border-line-strong focus:outline-none"
+        className="w-full rounded-[--radius-sm] border border-line bg-bg px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-line-strong focus:border-line-strong focus:outline-none"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -83,7 +83,7 @@ export function SearchFilters({
   onSortChange,
 }: SearchFiltersProps) {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <FilterDropdown
         label="Cakupan"
         value={ownedOnly ? "owned" : "all"}

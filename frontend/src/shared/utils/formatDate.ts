@@ -14,8 +14,7 @@ export function formatDateID(iso: string | null | undefined): string {
   if (!iso) return "—"
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return "—"
-  // Indo lokal pisahkan jam dengan titik ("00.16") bukan titik dua,
-  // jadi tukar manual karena Intl tidak expose separator override.
+  // Use a dot time separator for Indonesian UI; Intl has no separator option.
   const timePart = TIME_PART_FORMATTER.format(date).replace(":", ".")
   return `${DATE_PART_FORMATTER.format(date)}, ${timePart}`
 }

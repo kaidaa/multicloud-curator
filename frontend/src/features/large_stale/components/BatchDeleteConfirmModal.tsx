@@ -12,9 +12,7 @@ interface BatchDeleteConfirmModalProps {
   onCancel: () => void
 }
 
-// Pola identik dengan Feature 4 BatchDeleteConfirmModal tetapi standalone
-// untuk strict no-touch boundary. Promote ke shared saat Feature 6 (rule of
-// three).
+// Keep separate until a shared batch-action modal is justified.
 export function BatchDeleteConfirmModal({
   open,
   files,
